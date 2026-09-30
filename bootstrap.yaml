@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: One-time admin bootstrap for the Brahma Dexto demo (us-east-1).
+Parameters:
+  DextoPrincipalArn:
+    Type: String
+    Description: Broker IAM principal ARN from Dexto's AWS connect screen.
+    AllowedPattern: '^arn:aws:iam::[0-9]{12}:(role|user)/.+$'
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 1
+  BudgetEmail:
+    Type: String
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 150
+    MinValue: 1
+Resources:
+  DextoDemoRole:
+    Type: AWS::IAM::Role
+    # Legacy aws-mcp:* is required for this demo but absent from the lint catalog.
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks: [W3037]
+    Properties:
+      RoleName: DextoDemoRole
+      MaxSessionDuration: 3600
+      Tags: [{Key: project, Value: brahma-demo}]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {AWS: !Ref DextoPrincipalArn}
+            Action: ['sts:AssumeRole', 'sts:SetSourceIdentity']
+            Condition: {StringEquals: {'sts:ExternalId': !Ref ExternalId}}
+      # EB requires broad permissions on its underlying EC2, S3, IAM and other services.
+      # The explicit Deny below also gates this managed policy's grants through MCP.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk
+      Policies:
+        - PolicyName: ProvisionAndOperate
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DeleteStack
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:GetTemplate
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                Resource: !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/brahma-demo-*/*'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              - Effect: Allow
+                Action: cloudformation:ValidateTemplate
+                Resource: '*'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt DextoDemoCfnExecRole.Arn
+                Condition:
+                  Bool: {'aws:ViaAWSMCPService': 'true'}
+                  StringEquals: {'iam:PassedToService': cloudformation.amazonaws.com}
+              - Effect: Allow
+                Action: ['codebuild:StartBuild', 'codebuild:ListBuildsForProject']
+                Resource:
+                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/accounts-api-image'
+                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/risk-engine-image'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              - Effect: Allow
+                Action: codebuild:BatchGetBuilds
+                Resource:
+                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:build/accounts-api-image:*'
+                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:build/risk-engine-image:*'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              - Effect: Allow
+                Action: batch:RegisterJobDefinition
+                Resource: !Sub 'arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-definition/risk-engine'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              - Effect: Allow
+                Action: batch:SubmitJob
+                Resource:
+                  - !Sub 'arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job/*'
+                  - !Sub 'arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-definition/risk-engine'
+                  - !Sub 'arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-definition/risk-engine:*'
+                  - !Sub 'arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-queue/brahma-demo-queue'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              - Effect: Allow
+                Action: batch:TerminateJob
+                Resource: !Sub 'arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job/*'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              # These Batch read/list APIs do not support resource-level permissions.
+              - Effect: Allow
+                Action: ['batch:DescribeJobs', 'batch:DescribeJobDefinitions', 'batch:DescribeJobQueues', 'batch:ListJobs']
+                Resource: '*'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/brahma-demo-batch-job'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/brahma-demo-batch-exec'
+                Condition:
+                  Bool: {'aws:ViaAWSMCPService': 'true'}
+                  StringEquals: {'iam:PassedToService': ecs-tasks.amazonaws.com}
+              - Effect: Allow
+                Action: ['logs:GetLogEvents', 'logs:FilterLogEvents', 'logs:DescribeLogStreams']
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/batch/job:*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              - Effect: Allow
+                Action: eks:DescribeCluster
+                Resource: !Sub 'arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/brahma-demo'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              - Effect: Allow
+                Action: ['eks:ListClusters', 'sts:GetCallerIdentity']
+                Resource: '*'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              - Effect: Allow
+                Action: ['ecr:DescribeImages', 'ecr:DescribeRepositories', 'ecr:ListImages']
+                Resource: !Sub 'arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/brahma-demo/*'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              - Effect: Allow
+                Action: ['s3:ListBucket', 's3:GetBucketLocation']
+                Resource: !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}/*'
+                Condition: {Bool: {'aws:ViaAWSMCPService': 'true'}}
+              # A presigned JAR PUT comes from the computer, not from the MCP service.
+              # Only this artifacts prefix may be written outside MCP.
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub 'arn:aws:s3:::brahma-demo-artifacts-${AWS::AccountId}/ops-console/*'
+              - Effect: Allow
+                Action: ['aws-mcp:*', 'eks-mcp:*']
+                Resource: '*'
+              # BoolIfExists denies absent as well as false context, including EB grants.
+              - Effect: Deny
+                NotAction: ['s3:PutObject', 'aws-mcp:*', 'eks-mcp:*']
+                Resource: '*'
+                Condition: {BoolIfExists: {'aws:ViaAWSMCPService': 'false'}}
+              - Effect: Deny
+                Action: s3:PutObject
+                NotResource: !Sub 'arn:aws:s3:::brahma-demo-artifacts-${AWS::AccountId}/ops-console/*'
+                Condition: {BoolIfExists: {'aws:ViaAWSMCPService': 'false'}}
+  DextoDemoCfnExecRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DextoDemoCfnExecRole
+      Tags: [{Key: project, Value: brahma-demo}]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: cloudformation.amazonaws.com}
+            Action: sts:AssumeRole
+      # Demo-account execution role: CFN must create IAM roles, EKS and VPC resources.
+      # Explicit denies prevent user credentials, account/org changes and self-editing.
+      # This is a demo guardrail, not a sandbox against malicious admin templates.
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/AdministratorAccess]
+      Policies:
+        - PolicyName: DemoGuardrails
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Deny
+                Action: ['iam:CreateUser', 'iam:CreateAccessKey', 'iam:CreateLoginProfile', 'organizations:*', 'account:*']
+                Resource: '*'
+              - Effect: Deny
+                Action:
+                  - iam:CreateRole
+                  - iam:Update*
+                  - iam:Delete*
+                  - iam:Put*
+                  - iam:Attach*
+                  - iam:Detach*
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:AddRoleToInstanceProfile
+                  - iam:RemoveRoleFromInstanceProfile
+                Resource:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/DextoDemoRole'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/DextoDemoCfnExecRole'
+  DemoBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      ResourceTags: [{Key: project, Value: brahma-demo}]
+      Budget:
+        BudgetName: brahma-demo-monthly
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: {Amount: !Ref MonthlyBudgetUsd, Unit: USD}
+        # Activate project as a user-defined cost allocation tag in Billing first.
+        CostFilters: {TagKeyValue: ['user:project$brahma-demo']}
+      NotificationsWithSubscribers:
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref BudgetEmail}]
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref BudgetEmail}]
+Outputs:
+  DextoDemoRoleArn:
+    Value: !GetAtt DextoDemoRole.Arn
+  DextoDemoCfnExecRoleArn:
+    Value: !GetAtt DextoDemoCfnExecRole.Arn

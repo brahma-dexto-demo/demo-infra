@@ -1,0 +1,469 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Brahma enterprise demo, deployed by Dexto via CloudFormation in us-east-1.
+Parameters:
+  GitHubOrg: {Type: String, Default: brahma-dexto-demo}
+  CodeConnectionArn:
+    Type: String
+    Default: ''
+    Description: Optional AVAILABLE GitHub connection; empty uses public anonymous source.
+  AccountsApiImageTag: {Type: String, Default: bootstrap}
+  DextoRoleArn: {Type: String, Description: Bootstrap output DextoDemoRoleArn.}
+  AccountsApiUrl: {Type: String, Default: '', Description: Update to http://accounts-api LoadBalancer hostname.}
+  EbSolutionStackName:
+    Type: String
+    # AWS supported-platforms documentation checked 2026-09-30; recheck before deployment.
+    Default: 64bit Amazon Linux 2023 v4.12.9 running Corretto 17
+  NamespaceBootstrap:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Temporary cluster admin to create demo namespace; immediately update to false.
+Conditions:
+  HasConnection: !Not [!Equals [!Ref CodeConnectionArn, '']]
+  BootstrapNamespace: !Equals [!Ref NamespaceBootstrap, 'true']
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.42.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{Key: project, Value: brahma-demo}, {Key: Name, Value: brahma-demo}]
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags: [{Key: project, Value: brahma-demo}]
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: {VpcId: !Ref Vpc, InternetGatewayId: !Ref InternetGateway}
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - {Key: project, Value: brahma-demo}
+        - {Key: kubernetes.io/role/elb, Value: '1'}
+        - {Key: kubernetes.io/cluster/brahma-demo, Value: shared}
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.1.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - {Key: project, Value: brahma-demo}
+        - {Key: kubernetes.io/role/elb, Value: '1'}
+        - {Key: kubernetes.io/cluster/brahma-demo, Value: shared}
+  PublicRoutes:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags: [{Key: project, Value: brahma-demo}]
+  InternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties: {RouteTableId: !Ref PublicRoutes, DestinationCidrBlock: 0.0.0.0/0, GatewayId: !Ref InternetGateway}
+  SubnetARoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref PublicSubnetA, RouteTableId: !Ref PublicRoutes}
+  SubnetBRoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref PublicSubnetB, RouteTableId: !Ref PublicRoutes}
+  ClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags: [{Key: project, Value: brahma-demo}]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{Effect: Allow, Principal: {Service: eks.amazonaws.com}, Action: 'sts:AssumeRole'}]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/AmazonEKSClusterPolicy]
+  Cluster:
+    Type: AWS::EKS::Cluster
+    DependsOn: [InternetRoute, SubnetARoutes, SubnetBRoutes]
+    Properties:
+      Name: brahma-demo
+      Version: '1.36'
+      RoleArn: !GetAtt ClusterRole.Arn
+      AccessConfig: {AuthenticationMode: API_AND_CONFIG_MAP, BootstrapClusterCreatorAdminPermissions: false}
+      ResourcesVpcConfig:
+        SubnetIds: [!Ref PublicSubnetA, !Ref PublicSubnetB]
+        EndpointPublicAccess: true
+        EndpointPrivateAccess: true
+      Tags: [{Key: project, Value: brahma-demo}]
+  NodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags: [{Key: project, Value: brahma-demo}]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{Effect: Allow, Principal: {Service: ec2.amazonaws.com}, Action: 'sts:AssumeRole'}]
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+  NodeLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      TagSpecifications:
+        - ResourceType: launch-template
+          Tags: [{Key: project, Value: brahma-demo}]
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs: {VolumeSize: 20, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true}
+        TagSpecifications:
+          - ResourceType: instance
+            Tags: [{Key: project, Value: brahma-demo}]
+          - ResourceType: volume
+            Tags: [{Key: project, Value: brahma-demo}]
+  Nodes:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref Cluster
+      NodegroupName: brahma-demo
+      NodeRole: !GetAtt NodeRole.Arn
+      Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB]
+      InstanceTypes: [t3.medium]
+      AmiType: AL2023_x86_64_STANDARD
+      LaunchTemplate: {Id: !Ref NodeLaunchTemplate, Version: !GetAtt NodeLaunchTemplate.LatestVersionNumber}
+      ScalingConfig: {MinSize: 2, DesiredSize: 2, MaxSize: 2}
+      Tags: {project: brahma-demo}
+  PodIdentityAgent:
+    Type: AWS::EKS::Addon
+    DependsOn: Nodes
+    Properties:
+      ClusterName: !Ref Cluster
+      AddonName: eks-pod-identity-agent
+      Tags: [{Key: project, Value: brahma-demo}]
+  DextoAccess:
+    Type: AWS::EKS::AccessEntry
+    Properties:
+      ClusterName: !Ref Cluster
+      PrincipalArn: !Ref DextoRoleArn
+      Type: STANDARD
+      KubernetesGroups: [brahma-demo-node-readers]
+      Tags: [{Key: project, Value: brahma-demo}]
+      AccessPolicies:
+        - PolicyArn: arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy
+          AccessScope: {Type: namespace, Namespaces: [demo]}
+        - PolicyArn: arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy
+          AccessScope: {Type: cluster}
+        # Edit (even cluster-scoped) cannot create namespaces. Remove after bootstrap.
+        - !If
+          - BootstrapNamespace
+          - PolicyArn: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
+            AccessScope: {Type: cluster}
+          - !Ref AWS::NoValue
+  AccountsPodRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags: [{Key: project, Value: brahma-demo}]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: pods.eks.amazonaws.com}
+            Action: ['sts:AssumeRole', 'sts:TagSession']
+            Condition:
+              StringEquals:
+                aws:RequestTag/kubernetes-namespace: demo
+                aws:RequestTag/kubernetes-service-account: accounts-api
+                aws:RequestTag/eks-cluster-name: brahma-demo
+      Policies:
+        - PolicyName: DataRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - {Effect: Allow, Action: 's3:ListBucket', Resource: !GetAtt DataBucket.Arn}
+              - {Effect: Allow, Action: 's3:GetObject', Resource: !Sub '${DataBucket.Arn}/*'}
+  AccountsPodIdentity:
+    Type: AWS::EKS::PodIdentityAssociation
+    DependsOn: PodIdentityAgent
+    Properties:
+      ClusterName: !Ref Cluster
+      Namespace: demo
+      ServiceAccount: accounts-api
+      RoleArn: !GetAtt AccountsPodRole.Arn
+      Tags: [{Key: project, Value: brahma-demo}]
+  AccountsRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: brahma-demo/accounts-api
+      EmptyOnDelete: true
+      ImageScanningConfiguration: {ScanOnPush: true}
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"Keep last 20 images","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":20},"action":{"type":"expire"}}]}'
+      Tags: [{Key: project, Value: brahma-demo}]
+  RiskRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: brahma-demo/risk-engine
+      EmptyOnDelete: true
+      ImageScanningConfiguration: {ScanOnPush: true}
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"Keep last 20 images","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":20},"action":{"type":"expire"}}]}'
+      Tags: [{Key: project, Value: brahma-demo}]
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'brahma-demo-artifacts-${AWS::AccountId}'
+      PublicAccessBlockConfiguration: {BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true}
+      OwnershipControls: {Rules: [{ObjectOwnership: BucketOwnerEnforced}]}
+      BucketEncryption: {ServerSideEncryptionConfiguration: [{ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}}]}
+      Tags: [{Key: project, Value: brahma-demo}]
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'brahma-demo-data-${AWS::AccountId}'
+      PublicAccessBlockConfiguration: {BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true}
+      OwnershipControls: {Rules: [{ObjectOwnership: BucketOwnerEnforced}]}
+      BucketEncryption: {ServerSideEncryptionConfiguration: [{ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}}]}
+      Tags: [{Key: project, Value: brahma-demo}]
+  AccountsBuildLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/codebuild/accounts-api-image
+      RetentionInDays: 7
+      Tags: [{Key: project, Value: brahma-demo}]
+  AccountsBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags: [{Key: project, Value: brahma-demo}]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{Effect: Allow, Principal: {Service: codebuild.amazonaws.com}, Action: 'sts:AssumeRole'}]
+      Policies:
+        - PolicyName: BuildImage
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - {Effect: Allow, Action: 'ecr:GetAuthorizationToken', Resource: '*'}
+              - Effect: Allow
+                Action: ['ecr:BatchCheckLayerAvailability', 'ecr:InitiateLayerUpload', 'ecr:UploadLayerPart', 'ecr:CompleteLayerUpload', 'ecr:PutImage', 'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer']
+                Resource: !GetAtt AccountsRepo.Arn
+              - Effect: Allow
+                Action: ['logs:CreateLogStream', 'logs:PutLogEvents']
+                Resource: !GetAtt AccountsBuildLogs.Arn
+              - !If
+                - HasConnection
+                - Effect: Allow
+                  Action: ['codeconnections:UseConnection', 'codestar-connections:UseConnection']
+                  Resource: !Ref CodeConnectionArn
+                - !Ref AWS::NoValue
+  AccountsBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: accounts-api-image
+      ServiceRole: !GetAtt AccountsBuildRole.Arn
+      Artifacts: {Type: NO_ARTIFACTS}
+      Source:
+        Type: GITHUB
+        Location: !Sub 'https://github.com/${GitHubOrg}/accounts-api.git'
+        BuildSpec: buildspec.yml
+        ReportBuildStatus: false
+        Auth: !If [HasConnection, {Type: CODECONNECTIONS, Resource: !Ref CodeConnectionArn}, !Ref 'AWS::NoValue']
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux-x86_64-standard:5.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - {Name: ECR_URI, Value: !GetAtt AccountsRepo.RepositoryUri}
+          - {Name: AWS_DEFAULT_REGION, Value: !Ref 'AWS::Region'}
+      TimeoutInMinutes: 20
+      LogsConfig:
+        CloudWatchLogs: {Status: ENABLED, GroupName: !Ref AccountsBuildLogs}
+      Tags: [{Key: project, Value: brahma-demo}]
+  RiskBuildLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/codebuild/risk-engine-image
+      RetentionInDays: 7
+      Tags: [{Key: project, Value: brahma-demo}]
+  RiskBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags: [{Key: project, Value: brahma-demo}]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{Effect: Allow, Principal: {Service: codebuild.amazonaws.com}, Action: 'sts:AssumeRole'}]
+      Policies:
+        - PolicyName: BuildImage
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - {Effect: Allow, Action: 'ecr:GetAuthorizationToken', Resource: '*'}
+              - Effect: Allow
+                Action: ['ecr:BatchCheckLayerAvailability', 'ecr:InitiateLayerUpload', 'ecr:UploadLayerPart', 'ecr:CompleteLayerUpload', 'ecr:PutImage', 'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer']
+                Resource: !GetAtt RiskRepo.Arn
+              - Effect: Allow
+                Action: ['logs:CreateLogStream', 'logs:PutLogEvents']
+                Resource: !GetAtt RiskBuildLogs.Arn
+              - !If
+                - HasConnection
+                - Effect: Allow
+                  Action: ['codeconnections:UseConnection', 'codestar-connections:UseConnection']
+                  Resource: !Ref CodeConnectionArn
+                - !Ref AWS::NoValue
+  RiskBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: risk-engine-image
+      ServiceRole: !GetAtt RiskBuildRole.Arn
+      Artifacts: {Type: NO_ARTIFACTS}
+      Source:
+        Type: GITHUB
+        Location: !Sub 'https://github.com/${GitHubOrg}/risk-engine.git'
+        BuildSpec: buildspec.yml
+        ReportBuildStatus: false
+        Auth: !If [HasConnection, {Type: CODECONNECTIONS, Resource: !Ref CodeConnectionArn}, !Ref 'AWS::NoValue']
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux-x86_64-standard:5.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - {Name: ECR_URI, Value: !GetAtt RiskRepo.RepositoryUri}
+          - {Name: AWS_DEFAULT_REGION, Value: !Ref 'AWS::Region'}
+      TimeoutInMinutes: 20
+      LogsConfig:
+        CloudWatchLogs: {Status: ENABLED, GroupName: !Ref RiskBuildLogs}
+      Tags: [{Key: project, Value: brahma-demo}]
+  BatchLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/batch/job
+      RetentionInDays: 7
+      Tags: [{Key: project, Value: brahma-demo}]
+  BatchSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Batch outbound only, public IPs, no inbound access
+      VpcId: !Ref Vpc
+      SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
+      Tags: [{Key: project, Value: brahma-demo}]
+  BatchExecRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: brahma-demo-batch-exec
+      Tags: [{Key: project, Value: brahma-demo}]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{Effect: Allow, Principal: {Service: ecs-tasks.amazonaws.com}, Action: 'sts:AssumeRole'}]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy]
+  BatchJobRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: brahma-demo-batch-job
+      Tags: [{Key: project, Value: brahma-demo}]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{Effect: Allow, Principal: {Service: ecs-tasks.amazonaws.com}, Action: 'sts:AssumeRole'}]
+      Policies:
+        - PolicyName: DataReadWrite
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - {Effect: Allow, Action: 's3:ListBucket', Resource: !GetAtt DataBucket.Arn}
+              - {Effect: Allow, Action: ['s3:GetObject', 's3:PutObject'], Resource: !Sub '${DataBucket.Arn}/*'}
+  BatchCompute:
+    Type: AWS::Batch::ComputeEnvironment
+    DependsOn: [InternetRoute, SubnetARoutes, SubnetBRoutes]
+    Properties:
+      ComputeEnvironmentName: brahma-demo
+      Type: MANAGED
+      State: ENABLED
+      # Omitted ServiceRole lets Batch use/create its AWS service-linked role.
+      ComputeResources:
+        Type: FARGATE
+        MaxvCpus: 4
+        Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB]
+        SecurityGroupIds: [!Ref BatchSecurityGroup]
+        # assignPublicIp belongs to the agent-registered job definition, not the CE.
+      Tags: {project: brahma-demo}
+  BatchQueue:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      JobQueueName: brahma-demo-queue
+      Priority: 1
+      State: ENABLED
+      ComputeEnvironmentOrder: [{Order: 1, ComputeEnvironment: !Ref BatchCompute}]
+      Tags: {project: brahma-demo}
+  EbInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags: [{Key: project, Value: brahma-demo}]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{Effect: Allow, Principal: {Service: ec2.amazonaws.com}, Action: 'sts:AssumeRole'}]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier]
+      Policies:
+        - PolicyName: ReadApplicationJar
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - {Effect: Allow, Action: 's3:GetObject', Resource: !Sub '${ArtifactsBucket.Arn}/ops-console/*'}
+              - {Effect: Allow, Action: 's3:ListBucket', Resource: !GetAtt ArtifactsBucket.Arn}
+  EbInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: {Roles: [!Ref EbInstanceRole]}
+  EbServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags: [{Key: project, Value: brahma-demo}]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: elasticbeanstalk.amazonaws.com}
+            Action: sts:AssumeRole
+            Condition: {StringEquals: {'sts:ExternalId': elasticbeanstalk}}
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy
+  EbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTP for the public demo ops console
+      VpcId: !Ref Vpc
+      SecurityGroupIngress: [{IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0}]
+      SecurityGroupEgress: [{IpProtocol: '-1', CidrIp: 0.0.0.0/0}]
+      Tags: [{Key: project, Value: brahma-demo}]
+  EbApplication:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties: {ApplicationName: ops-console, Description: Brahma demo operations console}
+  EbEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    DependsOn: [InternetRoute, SubnetARoutes, SubnetBRoutes]
+    Properties:
+      ApplicationName: !Ref EbApplication
+      EnvironmentName: ops-console-staging
+      SolutionStackName: !Ref EbSolutionStackName
+      Tags: [{Key: project, Value: brahma-demo}]
+      OptionSettings:
+        - {Namespace: 'aws:elasticbeanstalk:environment', OptionName: EnvironmentType, Value: SingleInstance}
+        - {Namespace: 'aws:elasticbeanstalk:environment', OptionName: ServiceRole, Value: !GetAtt EbServiceRole.Arn}
+        - {Namespace: 'aws:elasticbeanstalk:healthreporting:system', OptionName: SystemType, Value: enhanced}
+        - {Namespace: 'aws:ec2:instances', OptionName: InstanceTypes, Value: t3.small}
+        - {Namespace: 'aws:autoscaling:launchconfiguration', OptionName: IamInstanceProfile, Value: !Ref EbInstanceProfile}
+        - {Namespace: 'aws:autoscaling:launchconfiguration', OptionName: SecurityGroups, Value: !Ref EbSecurityGroup}
+        - {Namespace: 'aws:ec2:vpc', OptionName: VPCId, Value: !Ref Vpc}
+        - {Namespace: 'aws:ec2:vpc', OptionName: Subnets, Value: !Ref PublicSubnetA}
+        - {Namespace: 'aws:ec2:vpc', OptionName: AssociatePublicIpAddress, Value: 'true'}
+        - {Namespace: 'aws:elasticbeanstalk:application:environment', OptionName: SERVER_PORT, Value: '5000'}
+        - {Namespace: 'aws:elasticbeanstalk:application:environment', OptionName: ACCOUNTS_API_URL, Value: !Ref AccountsApiUrl}
+Outputs:
+  ClusterName: {Value: !Ref Cluster}
+  AccountsApiEcrUri: {Value: !GetAtt AccountsRepo.RepositoryUri}
+  RiskEngineEcrUri: {Value: !GetAtt RiskRepo.RepositoryUri}
+  AccountsApiImageReference: {Value: !Sub '${AccountsRepo.RepositoryUri}:${AccountsApiImageTag}'}
+  ArtifactsBucketName: {Value: !Ref ArtifactsBucket}
+  DataBucketName: {Value: !Ref DataBucket}
+  AccountsApiCodeBuildProject: {Value: !Ref AccountsBuild}
+  RiskEngineCodeBuildProject: {Value: !Ref RiskBuild}
+  BatchQueueArn: {Value: !Ref BatchQueue}
+  EbEnvironmentUrl: {Value: !Sub 'http://${EbEnvironment.EndpointURL}'}
