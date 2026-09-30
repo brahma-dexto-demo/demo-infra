@@ -10,7 +10,7 @@ Parameters:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
-    Description: Require MCP routing for direct requests except artifacts uploads.
+    Description: Require MCP routing for direct requests except artifact and account seed uploads.
   ExternalId:
     Type: String
     NoEcho: true
@@ -128,11 +128,23 @@ Resources:
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}/*'
-              # A presigned JAR PUT comes from the computer, not from the MCP service.
-              # Only this artifacts prefix may be written outside MCP.
+              # Presigned JAR and account seed PUTs come from the computer.
+              # Only these two prefixes may be written, including outside MCP.
               - Effect: Allow
                 Action: s3:PutObject
-                Resource: !Sub 'arn:aws:s3:::brahma-demo-artifacts-${AWS::AccountId}/ops-console/*'
+                Resource:
+                  - !Sub 'arn:aws:s3:::brahma-demo-artifacts-${AWS::AccountId}/ops-console/*'
+                  - !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}/accounts/*'
+              # The standard EKS Service integration creates a Classic Load Balancer.
+              - Effect: Allow
+                Action: elasticloadbalancing:DeleteLoadBalancer
+                Resource: !Sub 'arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:loadbalancer/*'
+                Condition:
+                  StringEquals: {'aws:ResourceTag/project': brahma-demo}
+              # Classic ELB discovery APIs do not support resource-level permissions.
+              - Effect: Allow
+                Action: ['elasticloadbalancing:DescribeLoadBalancers', 'elasticloadbalancing:DescribeTags']
+                Resource: '*'
               - Effect: Allow
                 Action: ['aws-mcp:*', 'eks-mcp:*']
                 Resource: '*'
@@ -148,7 +160,9 @@ Resources:
                 - !Ref AWS::NoValue
               - Effect: Deny
                 Action: s3:PutObject
-                NotResource: !Sub 'arn:aws:s3:::brahma-demo-artifacts-${AWS::AccountId}/ops-console/*'
+                NotResource:
+                  - !Sub 'arn:aws:s3:::brahma-demo-artifacts-${AWS::AccountId}/ops-console/*'
+                  - !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}/accounts/*'
   DextoDemoCfnExecRole:
     Type: AWS::IAM::Role
     Properties:

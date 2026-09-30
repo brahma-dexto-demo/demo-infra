@@ -50,7 +50,7 @@ This step provisions infrastructure only; do not deploy the applications yet.
 
 ## 3. Prompt 2 — baseline deploy
 
-After Prompt 1, a human uploads `accounts-api/data/accounts/accounts.json` to the output `DataBucketName`, key `accounts/accounts.json`, using the S3 console. DextoDemoRole cannot seed this bucket. Replace the three placeholders with the recorded baseline SHAs, then paste:
+Prompt 2 seeds `accounts-api/data/accounts/accounts.json` to the output `DataBucketName`, key `accounts/accounts.json`, using an MCP-generated presigned PUT and a computer upload. Replace the three placeholders with the recorded baseline SHAs, then paste:
 
 ```text
 Deploy the before state to brahma-demo-staging in us-east-1. Use the immutable
@@ -58,21 +58,26 @@ baseline revisions accounts-api=<baseline-api-sha>, risk-engine=<baseline-risk-s
 ops-console=<baseline-console-sha>; retain these in the delivery report for resets.
 Use each repo's DEPLOY.md and the multi-repo-delivery, dev-toolchain, and browser
 skills. Use only managed AWS MCP for AWS and managed EKS MCP for Kubernetes.
-Confirm the human-seeded accounts/accounts.json exists in DataBucketName; if
-missing, stop and request the S3 console upload rather than attempting put_object.
+Confirm accounts/accounts.json exists in DataBucketName. If missing, obtain an
+aws___get_presigned_url PUT for DataBucketName/accounts/accounts.json and upload
+accounts-api/data/accounts/accounts.json from the computer with
+curl --fail --upload-file accounts-api/data/accounts/accounts.json "$PRESIGNED_PUT_URL". Keep the signed URL out of
+logs. DextoDemoRole may write only accounts/* in this data bucket.
 
 Start CodeBuild accounts-api-image and risk-engine-image at their published full
 SHAs and wait for SUCCEEDED. Buildspecs only build/push ECR images. Apply the API
 k8s manifests through apply_yaml with the SHA image and runtime bucket/account;
-preserve demo/accounts-api Pod Identity. Add the Service annotation
+preserve demo/accounts-api Pod Identity. For every image change, re-render the
+Deployment with the new image and re-apply it through apply_yaml. Preserve the
+Service annotation already present in k8s/service.yaml:
 service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags:
 project=brahma-demo. Use read_k8s_resource to require observedGeneration >=
 generation and two updated/available replicas, then obtain the Service
 LoadBalancer hostname and run live API contract tests.
 
-Update stack parameter AccountsApiUrl to http://<API-LoadBalancer-hostname> using
-the CloudFormation execution role, retaining all other parameters with
-UsePreviousValue=true and stack tags. Wait for UPDATE_COMPLETE before the EB
+Use CloudFormation UpdateStack on brahma-demo-staging to set AccountsApiUrl to
+http://<API-LoadBalancer-hostname> using the CloudFormation execution role,
+retaining all other parameters with UsePreviousValue=true and stack tags. Wait for UPDATE_COMPLETE before the EB
 application update, so ACCOUNTS_API_URL stays aligned with CloudFormation.
 
 Register the rendered risk-engine batch/job-definition.json with the SHA image,
@@ -85,8 +90,9 @@ Build ops-console on the computer with mvn -B package (or ./mvnw -B package),
 get an aws___get_presigned_url PUT for ArtifactsBucketName/ops-console/<sha>.jar,
 and upload target/ops-console.jar with curl without logging the signed URL.
 Create/reuse the matching EB application version, then update ops-console-staging
-with SERVER_PORT=5000, ACCOUNTS_API_URL=http://<API-LoadBalancer-hostname>, and
-health path /healthz. Wait for Ready/Green on the expected version. Run its live
+with VersionLabel only. CloudFormation owns SERVER_PORT=5000, ACCOUNTS_API_URL
+from AccountsApiUrl, and health path /healthz; keep these settings in the stack.
+Wait for Ready/Green on the expected version. Run its live
 browser smoke and show the account directory and detail before risk badges.
 Report the live console CNAME URL, API URL, all baseline SHAs, CodeBuild ids,
 Batch job id, and eval metrics. Do not add the feature or open PRs in this step.
@@ -184,14 +190,15 @@ Without the Loop, expand staging QA/report to finish near eight minutes; allow t
 
 ### Teardown
 
-1. Pause the Loop; stop builds and terminate running Batch jobs. Before deleting EKS, delete the `accounts-api` LoadBalancer Service and wait for its AWS load balancer/security groups to disappear. Use an available EKS MCP deletion capability; if only the five listed EKS tools are exposed, a human administrator must delete the Service through their Kubernetes administration path. Do not invent a deletion operation for `apply_yaml` or install kubectl on Dexto's computer.
+1. Pause the Loop, then follow [README.md → Teardown](README.md#teardown): stop builds/jobs, retain the API Service hostname, and use EKS MCP `apply_yaml` to re-apply `demo/accounts-api` as `ClusterIP` (preserve selector, ports and annotations). Verify with `read_k8s_resource` so Kubernetes cannot recreate the load balancer. If it remains, use the README's `aws___run_script` Classic ELB deletion script, which checks the hostname and both `project=brahma-demo` and `kubernetes.io/service-name=demo/accounts-api` tags. Bootstrap conditions deletion on the project resource tag. Poll until the load balancer is gone; a human verifies its ENIs have disappeared in **EC2 → Network Interfaces** before `DeleteStack`. If the script is denied or tags differ, a human verifies both tags in **EC2 → Load Balancers**, deletes only that load balancer, and waits for its ENIs to disappear. Inspect residual load balancer security groups as described in the README.
 2. Human admin empties **both** output buckets in S3 (including multipart uploads and any versions/delete markers). Stop writers first. DextoDemoRole has no dedicated data-bucket deletion permission.
 3. Paste into Dexto, substituting the execution-role output:
 
    ```text
    Delete CloudFormation stack brahma-demo-staging in us-east-1 through
    aws___run_script with boto3 and RoleARN=<DextoDemoCfnExecRoleArn>. First confirm
-   the API LoadBalancer is gone and the human has emptied both demo buckets.
+   Service is ClusterIP, the API LoadBalancer and its ENIs are gone, and the
+   human has emptied both demo buckets.
    Poll until deletion completes; report any DELETE_FAILED events and remaining
    resources. Keep all AWS activity in managed MCP.
    ```
