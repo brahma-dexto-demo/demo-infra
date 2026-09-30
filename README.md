@@ -1,12 +1,12 @@
 # demo-infra
 
-CloudFormation infrastructure for an enterprise demo of Dexto, an AI agent product. This AWS demo account stands in for a customer's account. All names follow `../conventions.md`; all regional resources run in **us-east-1**. There is no Terraform and no automatic deployment in this repository.
+CloudFormation infrastructure for an enterprise demo of Dexto, an AI agent product. The dedicated AWS member account **865579549254** holds only this demo and stands in for a customer's account. All names follow `../conventions.md`; all regional resources run in **us-east-1**. There is no Terraform and no automatic deployment in this repository.
 
 `bootstrap.yaml` is installed once by a human administrator. `stack.yaml` is then deployed as **brahma-demo-staging** by Dexto using the managed AWS MCP Server's `aws___run_script` (Python/boto3 with the caller's role credentials). Kubernetes changes use the managed Amazon EKS MCP Server. The agent's computer has no AWS credentials, AWS CLI, or kubectl.
 
 ## One-time administrator setup
 
-1. Use a dedicated demo account. Confirm that the convention names and account-global S3 bucket names are unused. Obtain the broker **IAM principal ARN** and **ExternalId** from Dexto's AWS connect screen. A role ARN is required, not an STS assumed-role session ARN.
+1. Use a dedicated demo account. Confirm that the convention names and account-global S3 bucket names are unused. Obtain the broker **IAM principal ARN** and **ExternalId** from Dexto's AWS connect screen. The default broker principal is `arn:aws:iam::138185518449:user/dexto-aws-mcp-broker`; use an IAM user or role ARN, not an STS assumed-role session ARN.
 2. Open the [CloudFormation console in us-east-1](https://console.aws.amazon.com/cloudformation/home?region=us-east-1). Upload `bootstrap.yaml` through **Create stack → With new resources (standard)**, or use the quick-create route below. Name the stack **dexto-demo-bootstrap** (outside the agent's `brahma-demo-*` stack scope).
 3. For console quick-create, first upload this exact file to a private, existing administrator-controlled S3 bucket. Do not use the demo artifacts bucket: it does not exist yet. URL-encode its HTTPS S3 object URL and open:
 
@@ -14,12 +14,12 @@ CloudFormation infrastructure for an enterprise demo of Dexto, an AI agent produ
    https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=dexto-demo-bootstrap&templateURL=<URL-encoded-HTTPS-S3-object-URL>
    ```
 
-   Fill in `DextoPrincipalArn`, `ExternalId`, `BudgetEmail`, and `MonthlyBudgetUsd` (default 150) in the console. Keep the external ID out of shared quick-create URLs. Acknowledge **CAPABILITY_NAMED_IAM**, review, and create. Add the stack tag `project=brahma-demo` in either flow.
+   Review `DextoPrincipalArn` (default broker above), fill in `ExternalId` and `BudgetEmail`, and review `MonthlyBudgetUsd` (default 150) and `EnforceMcpOnly` (default `true`) in the console. Keep the external ID out of shared quick-create URLs. Acknowledge **CAPABILITY_NAMED_IAM**, review, and create. Add the stack tag `project=brahma-demo` in either flow.
 4. Wait for `CREATE_COMPLETE`. Copy both role ARN outputs. Enter `DextoDemoRoleArn` into Dexto's AWS connection and retain `DextoDemoCfnExecRoleArn` for provisioning. Ensure the broker sets source identity when assuming the role and supplies the external ID. Sessions are limited to one hour.
-5. In Billing → Cost allocation tags, activate the user-defined `project` tag when it appears (AWS can take time to expose it). The monthly budget uses the supported CFN `CostFilters.TagKeyValue = user:project$brahma-demo` filter. Confirm that both email alerts arrive when spending exceeds 80% and 100%. Alerts have billing delay and do not stop resources. Untagged costs are not included; review the account's overall bill too. [Budget filter syntax](https://docs.aws.amazon.com/cli/latest/userguide/cli_budgets_code_examples.html).
+5. The monthly budget covers the entire dedicated member account, including untagged costs. Confirm that both email alerts arrive when spending exceeds 80% and 100%. Alerts have billing delay and do not stop resources.
 6. Public repositories are the default. For private repos, a human must create and authorize a GitHub CodeConnection with access to `accounts-api` and `risk-engine`; its status must be **AVAILABLE**. Pass its ARN as `CodeConnectionArn`. The template grants each build role use of only that connection, including the legacy ARN/action prefix.
 
-The broker's inline provisioning/operation allows require `aws:ViaAWSMCPService=true`. The broad AWS-managed Beanstalk policy is necessary for EB's underlying services; explicit denies impose the same MCP routing requirement on those grants. `s3:PutObject` to `brahma-demo-artifacts-<account>/ops-console/*` is the single data-plane exception: the computer uploads a locally built JAR using a presigned PUT generated by MCP. Other non-MCP S3 writes are explicitly denied. Legacy `aws-mcp:*` and `eks-mcp:*` permissions are retained as requested. [MCP IAM context](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/security_iam_service-with-iam.html).
+`EnforceMcpOnly=true` (the default) enables one explicit deny across the broker's inline and AWS-managed Beanstalk grants: direct requests must carry `aws:ViaAWSMCPService=true`. AWS services acting on the caller's behalf remain allowed through `aws:ViaAWSService=true`; Elastic Beanstalk and CloudFormation use forward access sessions that carry this key without the MCP key. If the managed MCP servers turn out not to set `aws:ViaAWSMCPService` for `run_script` calls, a human administrator must update the **dexto-demo-bootstrap** stack with `EnforceMcpOnly=false`, retaining all other parameters. The agent should still use MCP as instructed. `s3:PutObject` to `brahma-demo-artifacts-<account>/ops-console/*` is the data-plane exception: the computer uploads a locally built JAR using a presigned PUT generated by MCP. An unconditional deny blocks `s3:PutObject` outside that prefix, including when enforcement is disabled. Legacy `aws-mcp:*` and `eks-mcp:*` permissions are retained and exempt from the routing deny. [MCP IAM context](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/security_iam_service-with-iam.html).
 
 CloudFormation assumes `DextoDemoCfnExecRole`, whose trust permits only CloudFormation. Its AdministratorAccess is needed for this demo's IAM roles, EKS and VPC. Explicit denies block IAM user/access-key/login-profile creation, Organizations/Account actions, and mutation of either bootstrap role. This is a powerful demo-account execution role, not isolation from a malicious template: it can still create other privileged roles. Deploy reviewed templates in this dedicated account.
 
@@ -41,19 +41,13 @@ using that same TemplateBody, RoleARN=<DextoDemoCfnExecRoleArn>,
 Capabilities=["CAPABILITY_NAMED_IAM"], Tags=[{"Key":"project","Value":"brahma-demo"}],
 and parameters GitHubOrg=brahma-dexto-demo, CodeConnectionArn="",
 AccountsApiImageTag=bootstrap, DextoRoleArn=<DextoDemoRoleArn>,
-AccountsApiUrl="", NamespaceBootstrap=true. Preserve the platform default unless
+AccountsApiUrl="". Preserve the platform default unless
 AWS rejects it; if so use the current available Corretto 17 AL2023 solution stack
 from elasticbeanstalk.list_available_solution_stacks. Poll describe_stacks and
 report describe_stack_events on failure. Do not retry with broader IAM grants.
 
-After CREATE_COMPLETE, the FIRST EKS MCP operation must create namespace demo.
-Then apply the README's node-reader ClusterRole and ClusterRoleBinding. Immediately
-update the stack through aws___run_script with UsePreviousTemplate=true,
-RoleARN=<DextoDemoCfnExecRoleArn>, CAPABILITY_NAMED_IAM, NamespaceBootstrap=false,
-and UsePreviousValue=true for every other parameter. Wait for UPDATE_COMPLETE
-and confirm the temporary AmazonEKSClusterAdminPolicy association is gone. If
-namespace/RBAC setup fails, still remove temporary access and report the failure.
-Never leave NamespaceBootstrap=true during ordinary demo operation.
+On first application deploy, use EKS MCP apply_yaml to create namespace demo and
+service account accounts-api in that namespace before applying workloads.
 
 Report all stack outputs. Tag the ops-console application project=brahma-demo
 with elasticbeanstalk.update_tags_for_resource (resolve its ARN at runtime).
@@ -64,7 +58,7 @@ commit SHAs. Their repo buildspec.yml files only build/push images; they must no
 deploy anything. For accounts-api, use EKS MCP to apply its repo's k8s manifests,
 substituting the SHA image and runtime data bucket. Wait for readiness and the
 Service LoadBalancer hostname, then update stack parameter AccountsApiUrl to
-http://<hostname>, retaining NamespaceBootstrap=false and all other parameters.
+http://<hostname>, retaining all other parameters.
 Register risk-engine from its repo's batch/job-definition.json, substituting the
 image, account and data bucket; ensure networkConfiguration.assignPublicIp is
 ENABLED and add project=brahma-demo to the definition and submitted job, with
@@ -74,7 +68,7 @@ upload with curl, then use boto3 via MCP to create_application_version and
 update_environment. Wait for Ready/Green and report the application URLs.
 ```
 
-For an existing stack, use `UpdateStack` with the execution role and retain all unchanged parameters with `UsePreviousValue=true`; do not overwrite `AccountsApiUrl`, the selected platform, or `NamespaceBootstrap=false`. Pass stack-level `project=brahma-demo` tags on creation and retain them on updates. A `bootstrap` image tag is only an initial image reference output; the infrastructure does not create a Kubernetes Deployment or require that image to exist. `AccountsApiImageTag` affects that output, not running pods.
+For an existing stack, use `UpdateStack` with the execution role and retain all unchanged parameters with `UsePreviousValue=true`; do not overwrite `AccountsApiUrl` or the selected platform. Pass stack-level `project=brahma-demo` tags on creation and retain them on updates. A `bootstrap` image tag is only an initial image reference output; the infrastructure does not create a Kubernetes Deployment or require that image to exist. `AccountsApiImageTag` affects that output, not running pods.
 
 The human seeds `accounts-api/data/accounts/accounts.json` at `accounts/accounts.json` in the data bucket through the S3 console. The broker has data read permission; the Batch job role writes `scores/latest.json`. No seed data custom resource is hidden in the templates.
 
@@ -82,35 +76,9 @@ The human seeds `accounts-api/data/accounts/accounts.json` at `accounts/accounts
 
 Default Kubernetes version **1.36** is currently supported, according to the [EKS platform release table](https://docs.aws.amazon.com/eks/latest/userguide/platform-versions.html) checked on 2026-09-30. The public endpoint makes EKS MCP reachable; the private endpoint also lets nodes communicate locally. Two AL2023 managed nodes run in distinct public AZ subnets. Subnets auto-assign public IPs and have an Internet Gateway; there is **no NAT**. Pod Identity uses `demo/accounts-api`, and the node role supports `eks-auth:AssumeRoleForPodIdentity` through AmazonEKSWorkerNodePolicy.
 
-CloudFormation creates the Pod Identity association but does not create the Kubernetes namespace or service account. `AmazonEKSEditPolicy` lacks namespace creation even at cluster scope. Therefore `NamespaceBootstrap=true` temporarily adds `AmazonEKSClusterAdminPolicy`. The agent creates `demo` first and removes that policy with an immediate CFN update to `false`. Thereafter the role has edit only in `demo` and `AmazonEKSViewPolicy` at cluster scope for events and normal workload visibility. This access is eventually consistent; retry briefly after CFN completion. [AWS policy tables](https://docs.aws.amazon.com/eks/latest/userguide/access-policy-permissions.html).
+CloudFormation creates the Pod Identity association but does not create the Kubernetes namespace or service account. `DextoRoleArn` permanently receives `AmazonEKSClusterAdminPolicy` at cluster scope because this is a dedicated demo cluster in a dedicated account; a customer POC would scope access to namespaces. On first deploy, the agent uses EKS MCP `apply_yaml` to create namespace `demo` and service account `accounts-api` in `demo` before applying the application workloads. Access is eventually consistent; retry briefly after CFN completion. [AWS policy tables](https://docs.aws.amazon.com/eks/latest/userguide/access-policy-permissions.html).
 
-`AmazonEKSViewPolicy` does not include nodes. During the temporary bootstrap grant, apply these objects with EKS MCP to provide node reads to the access entry's `brahma-demo-node-readers` group without broader lasting access:
-
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: brahma-demo-node-reader
-rules:
-  - apiGroups: [""]
-    resources: [nodes]
-    verbs: [get, list, watch]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: brahma-demo-node-reader
-subjects:
-  - kind: Group
-    name: brahma-demo-node-readers
-    apiGroup: rbac.authorization.k8s.io
-roleRef:
-  kind: ClusterRole
-  name: brahma-demo-node-reader
-  apiGroup: rbac.authorization.k8s.io
-```
-
-These RBAC objects and `demo` live inside the EKS cluster; they disappear with it. Do not attempt to create them after removing the bootstrap grant. The API's existing `Service type: LoadBalancer` uses EKS's standard service integration; do not add NLB-controller-specific annotations without provisioning that controller and its IAM permissions. Tag the Service's AWS load balancer with `service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: project=brahma-demo` when applying the manifest.
+The namespace and service account live inside the EKS cluster and disappear with it. The API's existing `Service type: LoadBalancer` uses EKS's standard service integration; do not add NLB-controller-specific annotations without provisioning that controller and its IAM permissions. Tag the Service's AWS load balancer with `service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: project=brahma-demo` when applying the manifest.
 
 ## Build, Batch, Beanstalk and tagging details
 
@@ -119,7 +87,7 @@ These RBAC objects and `demo` live inside the EKS cluster; they disappear with i
 - Batch max compute capacity is 4 vCPU, with outbound-only networking. **`assignPublicIp: ENABLED` is a job-definition property**, not a compute-environment property. It is already present in `risk-engine/batch/job-definition.json`; the agent must preserve it. Otherwise Fargate cannot reach ECR/logs/S3 without NAT/endpoints. There is intentionally no CFN job definition. Tag definitions and jobs `project=brahma-demo` and propagate job tags to tasks.
 - Beanstalk starts with its platform's sample app; no JAR exists at stack creation. It uses one `t3.small`, the public subnet, HTTP on port 80 through nginx, and `SERVER_PORT=5000`. The agent replaces the sample through an application version after uploading the JAR and updates `AccountsApiUrl` once the API LB is available. The parameter is passed into `ACCOUNTS_API_URL`.
 - Default solution stack **64bit Amazon Linux 2023 v4.12.9 running Corretto 17** comes from AWS's [supported platforms table](https://docs.aws.amazon.com/elasticbeanstalk/latest/platforms/platforms-supported.html), checked on 2026-09-30. It is mutable over time and has not been verified against a live us-east-1 API. The agent can use `list_available_solution_stacks` through MCP and override `EbSolutionStackName` if necessary.
-- Every template resource exposing tags has `project=brahma-demo`; the node launch template also tags EC2 instances and EBS volumes. Stack tags are required as well. CFN does **not** expose a Tags property for routes, gateway attachments, route associations, IAM instance profiles or EB applications; use supported stack-tag propagation rather than invalid YAML fields. The agent should tag the EB application via `elasticbeanstalk.update_tags_for_resource` after creation (its application ARN is resolved at runtime), because that API supports tags although CFN's Application schema does not. Generated/service-linked resources may not inherit tags; verify billing coverage. [CFN tagging behavior](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-resource-tags.html).
+- Every template resource exposing tags has `project=brahma-demo`; the node launch template also tags EC2 instances and EBS volumes. Stack tags are required as well. CFN does **not** expose a Tags property for routes, gateway attachments, route associations, IAM instance profiles or EB applications; use supported stack-tag propagation rather than invalid YAML fields. The agent should tag the EB application via `elasticbeanstalk.update_tags_for_resource` after creation (its application ARN is resolved at runtime), because that API supports tags although CFN's Application schema does not. Generated/service-linked resources may not inherit tags; the account-wide budget includes their costs. [CFN tagging behavior](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-resource-tags.html).
 
 ## Approximate cost
 

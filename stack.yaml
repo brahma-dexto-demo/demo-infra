@@ -13,14 +13,8 @@ Parameters:
     Type: String
     # AWS supported-platforms documentation checked 2026-09-30; recheck before deployment.
     Default: 64bit Amazon Linux 2023 v4.12.9 running Corretto 17
-  NamespaceBootstrap:
-    Type: String
-    Default: 'true'
-    AllowedValues: ['true', 'false']
-    Description: Temporary cluster admin to create demo namespace; immediately update to false.
 Conditions:
   HasConnection: !Not [!Equals [!Ref CodeConnectionArn, '']]
-  BootstrapNamespace: !Equals [!Ref NamespaceBootstrap, 'true']
 Resources:
   Vpc:
     Type: AWS::EC2::VPC
@@ -145,19 +139,11 @@ Resources:
       ClusterName: !Ref Cluster
       PrincipalArn: !Ref DextoRoleArn
       Type: STANDARD
-      KubernetesGroups: [brahma-demo-node-readers]
       Tags: [{Key: project, Value: brahma-demo}]
+      # Dedicated demo cluster in a dedicated account; a customer POC would scope to namespaces.
       AccessPolicies:
-        - PolicyArn: arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy
-          AccessScope: {Type: namespace, Namespaces: [demo]}
-        - PolicyArn: arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy
+        - PolicyArn: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
           AccessScope: {Type: cluster}
-        # Edit (even cluster-scoped) cannot create namespaces. Remove after bootstrap.
-        - !If
-          - BootstrapNamespace
-          - PolicyArn: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
-            AccessScope: {Type: cluster}
-          - !Ref AWS::NoValue
   AccountsPodRole:
     Type: AWS::IAM::Role
     Properties:
