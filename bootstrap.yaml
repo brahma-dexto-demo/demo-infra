@@ -146,6 +146,13 @@ Resources:
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}/*'
+              # Elastic Beanstalk CreateApplicationVersion reads the CodeBuild JAR as the caller.
+              - Effect: Allow
+                Action: ['s3:ListBucket', 's3:GetBucketLocation']
+                Resource: !Sub 'arn:aws:s3:::brahma-demo-artifacts-${AWS::AccountId}'
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub 'arn:aws:s3:::brahma-demo-artifacts-${AWS::AccountId}/ops-console/*'
               # Inline account seeds are written through managed MCP; CodeBuild publishes JARs.
               - Effect: Allow
                 Action: s3:PutObject
