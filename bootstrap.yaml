@@ -39,10 +39,16 @@ Resources:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
+          # sts:ExternalId is not in the SetSourceIdentity request context, so each action
+          # needs its own statement.
           - Effect: Allow
             Principal: {AWS: !Ref DextoPrincipalArn}
-            Action: ['sts:AssumeRole', 'sts:SetSourceIdentity']
+            Action: sts:AssumeRole
             Condition: {StringEquals: {'sts:ExternalId': !Ref ExternalId}}
+          - Effect: Allow
+            Principal: {AWS: !Ref DextoPrincipalArn}
+            Action: sts:SetSourceIdentity
+            Condition: {StringLike: {'sts:SourceIdentity': 'dexto-*'}}
       # EB requires broad permissions on its underlying EC2, S3, IAM and other services.
       # When enabled, the explicit Deny also gates this managed policy's direct grants through MCP.
       ManagedPolicyArns:
