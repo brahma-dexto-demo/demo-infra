@@ -120,7 +120,9 @@ Resources:
                   - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/batch/job:*'
                   - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*'
               - Effect: Allow
-                Action: eks:DescribeCluster
+                # The managed EKS MCP server reaches the Kubernetes API through eks:AccessKubernetesApi;
+                # the cluster access entry then governs what it may do in Kubernetes.
+                Action: ['eks:DescribeCluster', 'eks:AccessKubernetesApi']
                 Resource: !Sub 'arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/brahma-demo'
               - Effect: Allow
                 Action: ['eks:ListClusters', 'sts:GetCallerIdentity']
