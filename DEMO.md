@@ -61,8 +61,7 @@ skills. Use only managed AWS MCP for AWS and managed EKS MCP for Kubernetes.
 Confirm accounts/accounts.json exists in DataBucketName. If missing, obtain an
 aws___get_presigned_url PUT for DataBucketName/accounts/accounts.json and upload
 accounts-api/data/accounts/accounts.json from the computer with
-curl --fail --upload-file accounts-api/data/accounts/accounts.json "$PRESIGNED_PUT_URL". Keep the signed URL out of
-logs. DextoDemoRole may write only accounts/* in this data bucket.
+curl --fail --upload-file accounts-api/data/accounts/accounts.json "$PRESIGNED_PUT_URL". The presigned URL is short-lived and scoped to that one object, so passing it to curl is fine; don't paste it into the delivery report. DextoDemoRole may write only accounts/* in this data bucket.
 
 Start CodeBuild accounts-api-image and risk-engine-image at their published full
 SHAs and wait for SUCCEEDED. Buildspecs only build/push ECR images. Apply the API
@@ -88,7 +87,7 @@ and scores/latest.json, checking that generated_at belongs to this run.
 
 Build ops-console on the computer with mvn -B package (or ./mvnw -B package),
 get an aws___get_presigned_url PUT for ArtifactsBucketName/ops-console/<sha>.jar,
-and upload target/ops-console.jar with curl without logging the signed URL.
+and upload target/ops-console.jar with curl (the short-lived presigned URL may appear in the command).
 Create/reuse the matching EB application version, then update ops-console-staging
 with VersionLabel only. CloudFormation owns SERVER_PORT=5000, ACCOUNTS_API_URL
 from AccountsApiUrl, and health path /healthz; keep these settings in the stack.

@@ -86,10 +86,11 @@ Resources:
                   - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/accounts-api-image'
                   - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/risk-engine-image'
               - Effect: Allow
+                # CodeBuild authorizes BatchGetBuilds against the project ARN, not the build ARN.
                 Action: codebuild:BatchGetBuilds
                 Resource:
-                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:build/accounts-api-image:*'
-                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:build/risk-engine-image:*'
+                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/accounts-api-image'
+                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/risk-engine-image'
               - Effect: Allow
                 Action: batch:RegisterJobDefinition
                 Resource: !Sub 'arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-definition/risk-engine'
