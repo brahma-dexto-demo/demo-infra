@@ -10,7 +10,7 @@ Parameters:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
-    Description: Require MCP routing for direct requests except artifact and account seed uploads.
+    Description: Require MCP routing for direct requests.
   ExternalId:
     Type: String
     NoEcho: true
@@ -85,15 +85,23 @@ Resources:
                 Resource:
                   - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/accounts-api-image'
                   - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/risk-engine-image'
+                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/ops-console-jar'
               - Effect: Allow
                 # CodeBuild authorizes BatchGetBuilds against the project ARN, not the build ARN.
                 Action: codebuild:BatchGetBuilds
                 Resource:
                   - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/accounts-api-image'
                   - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/risk-engine-image'
+                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/ops-console-jar'
               - Effect: Allow
                 Action: batch:RegisterJobDefinition
                 Resource: !Sub 'arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-definition/risk-engine'
+              - Effect: Allow
+                Action: batch:TagResource
+                Resource:
+                  - !Sub 'arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-definition/risk-engine'
+                  - !Sub 'arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-definition/risk-engine:*'
+                  - !Sub 'arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job/*'
               - Effect: Allow
                 Action: batch:SubmitJob
                 Resource:
@@ -137,13 +145,10 @@ Resources:
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}/*'
-              # Presigned JAR and account seed PUTs come from the computer.
-              # Only these two prefixes may be written, including outside MCP.
+              # Inline account seeds are written through managed MCP; CodeBuild publishes JARs.
               - Effect: Allow
                 Action: s3:PutObject
-                Resource:
-                  - !Sub 'arn:aws:s3:::brahma-demo-artifacts-${AWS::AccountId}/ops-console/*'
-                  - !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}/accounts/*'
+                Resource: !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}/accounts/*'
               # The standard EKS Service integration creates a Classic Load Balancer.
               - Effect: Allow
                 Action: elasticloadbalancing:DeleteLoadBalancer
@@ -162,16 +167,11 @@ Resources:
               - !If
                 - EnforceMcpOnlyEnabled
                 - Effect: Deny
-                  NotAction: ['s3:PutObject', 'aws-mcp:*', 'eks-mcp:*']
+                  NotAction: ['aws-mcp:*', 'eks-mcp:*']
                   Resource: '*'
                   Condition:
                     BoolIfExists: {'aws:ViaAWSMCPService': 'false', 'aws:ViaAWSService': 'false'}
                 - !Ref AWS::NoValue
-              - Effect: Deny
-                Action: s3:PutObject
-                NotResource:
-                  - !Sub 'arn:aws:s3:::brahma-demo-artifacts-${AWS::AccountId}/ops-console/*'
-                  - !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}/accounts/*'
   DextoDemoCfnExecRole:
     Type: AWS::IAM::Role
     Properties:

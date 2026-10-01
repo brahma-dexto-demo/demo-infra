@@ -1,6 +1,6 @@
 # Dexto enterprise demo run book
 
-Rahul pastes the prompts below into Dexto chat. Dexto does the work on its cloud computer and shows progress in the same conversation. AWS region: `us-east-1`. AWS APIs use managed AWS MCP (`aws___run_script` = Python/boto3, `aws___get_presigned_url`, `aws___get_tasks` for task status); Kubernetes uses managed Amazon EKS MCP (`apply_yaml`, `read_k8s_resource`, `list_k8s_resources`, `get_pod_logs`, `get_k8s_events`). The computer has no AWS credentials, AWS CLI, or kubectl.
+Rahul pastes the prompts below into Dexto chat. Dexto does the work on its cloud computer and shows progress in the same conversation. AWS region: `us-east-1`. AWS APIs use managed AWS MCP (`aws___run_script` = Python/boto3, `aws___get_tasks` for task status); Kubernetes uses managed Amazon EKS MCP (`apply_yaml`, `read_k8s_resource`, `list_k8s_resources`, `get_pod_logs`, `get_k8s_events`). The computer has no AWS credentials, AWS CLI, or kubectl.
 
 ## 1. Before the demo (one-time)
 
@@ -9,7 +9,7 @@ Rahul pastes the prompts below into Dexto chat. Dexto does the work on its cloud
 - [ ] Connect GitHub with access to `brahma-dexto-demo` and turn **Push and open PRs as Dexto** on. **Pass:** the setting is on, all three repositories are accessible, and each CODEOWNERS file names `@rahulkarajgikar`.
 - [ ] Settings › Computer: add `brahma-dexto-demo/accounts-api`, `brahma-dexto-demo/risk-engine`, and `brahma-dexto-demo/ops-console`. **Pass:** the computer base-clones all three into `/workspace/repos/brahma-dexto-demo/<repo>`. Make `brahma-dexto-demo/demo-infra/stack.yaml` and shared `conventions.md` available too (add demo-infra or clone it through the GitHub connection).
 - [ ] Confirm platform skills `multi-repo-delivery`, `dev-toolchain`, and `browser` are available. **Pass:** Java 17/Maven and local Docker are installed through `dev-toolchain`; Python/uv and Node are available; browser can open a local page.
-- [ ] Publish the baseline source revisions before rehearsal; record the three immutable baseline SHAs. **Pass:** CodeBuild can fetch the API and risk repositories at those SHAs (public by default; private needs an AVAILABLE CodeConnection).
+- [ ] Publish the baseline source revisions before rehearsal; record the three immutable baseline SHAs. **Pass:** CodeBuild can fetch all three application repositories at those SHAs (public by default; private needs an AVAILABLE CodeConnection).
 
 ## 2. Prompt 1 — provision staging
 
@@ -44,13 +44,13 @@ This step provisions infrastructure only; do not deploy the applications yet.
 
 **Duration:** approximately 15–20 minutes; EKS is the long pole. Keep polling visible, but compress the wait in the recording.
 
-**Done:** stack `CREATE_COMPLETE`; EKS cluster and nodes active; `demo/accounts-api` service account exists. Report these exact output keys: `ClusterName`, `AccountsApiEcrUri`, `RiskEngineEcrUri`, `AccountsApiImageReference`, `ArtifactsBucketName`, `DataBucketName`, `AccountsApiCodeBuildProject`, `RiskEngineCodeBuildProject`, `BatchQueueArn`, `EbEnvironmentUrl`. The `bootstrap` image reference is a placeholder, and EB still serves its sample app. No API LoadBalancer exists yet.
+**Done:** stack `CREATE_COMPLETE`; EKS cluster and nodes active; `demo/accounts-api` service account exists. Report these exact output keys: `ClusterName`, `AccountsApiEcrUri`, `RiskEngineEcrUri`, `AccountsApiImageReference`, `ArtifactsBucketName`, `DataBucketName`, `AccountsApiCodeBuildProject`, `RiskEngineCodeBuildProject`, `OpsConsoleCodeBuildProject`, `BatchQueueArn`, `EbEnvironmentUrl`. The `bootstrap` image reference is a placeholder, and EB still serves its sample app. No API LoadBalancer exists yet.
 
 **Console check:** AWS console → region **us-east-1** → CloudFormation → `brahma-demo-staging` → Events (completion) and Outputs (values). EKS → `brahma-demo` → Overview/Compute (active cluster, two nodes); Elastic Beanstalk → `ops-console-staging` (sample environment).
 
 ## 3. Prompt 2 — baseline deploy
 
-Prompt 2 seeds `accounts-api/data/accounts/accounts.json` to the output `DataBucketName`, key `accounts/accounts.json`, using an MCP-generated presigned PUT and a computer upload. Replace the three placeholders with the recorded baseline SHAs, then paste:
+Prompt 2 seeds `accounts-api/data/accounts/accounts.json` to the output `DataBucketName`, key `accounts/accounts.json`, using `aws___run_script` with the complete JSON embedded inline in a boto3 `s3.put_object` call, verified by `head_object` (see accounts-api/DEPLOY.md). Replace the three placeholders with the recorded baseline SHAs, then paste:
 
 ```text
 Deploy the before state to brahma-demo-staging in us-east-1. Use the immutable
@@ -58,10 +58,14 @@ baseline revisions accounts-api=<baseline-api-sha>, risk-engine=<baseline-risk-s
 ops-console=<baseline-console-sha>; retain these in the delivery report for resets.
 Use each repo's DEPLOY.md and the multi-repo-delivery, dev-toolchain, and browser
 skills. Use only managed AWS MCP for AWS and managed EKS MCP for Kubernetes.
-Confirm accounts/accounts.json exists in DataBucketName. If missing, obtain an
-aws___get_presigned_url PUT for DataBucketName/accounts/accounts.json and upload
-accounts-api/data/accounts/accounts.json from the computer with
-curl --fail --upload-file accounts-api/data/accounts/accounts.json "$PRESIGNED_PUT_URL". The presigned URL is short-lived and scoped to that one object, so passing it to curl is fine; don't paste it into the delivery report. DextoDemoRole may write only accounts/* in this data bucket.
+Confirm accounts/accounts.json exists in DataBucketName using s3.head_object
+through aws___run_script. If missing, read the full 52 KB synthetic JSON from
+accounts-api/data/accounts/accounts.json on the computer and embed its contents
+inline in an aws___run_script call to boto3 s3.put_object, ContentType=application/json,
+Bucket=DataBucketName, Key=accounts/accounts.json. Follow accounts-api/DEPLOY.md;
+validate the embedded JSON and verify the written object's ContentLength and
+ContentType with head_object. DextoDemoRole may write accounts/* in this data
+bucket through managed MCP.
 
 Start CodeBuild accounts-api-image and risk-engine-image at their published full
 SHAs and wait for SUCCEEDED. Buildspecs only build/push ECR images. Apply the API
@@ -85,11 +89,12 @@ and job project=brahma-demo, set propagateTags=true, and submit exactly one job
 to brahma-demo-queue. Wait for SUCCEEDED; read CloudWatch logs, eval metrics,
 and scores/latest.json, checking that generated_at belongs to this run.
 
-Build ops-console on the computer with mvn -B package (or ./mvnw -B package),
-get an aws___get_presigned_url PUT for ArtifactsBucketName/ops-console/<sha>.jar,
-and upload target/ops-console.jar with curl (the short-lived presigned URL may appear in the command).
-Create/reuse the matching EB application version, then update ops-console-staging
-with VersionLabel only. CloudFormation owns SERVER_PORT=5000, ACCOUNTS_API_URL
+Start CodeBuild ops-console-jar through aws___run_script at the published full
+baseline console SHA and wait for SUCCEEDED; verify resolvedSourceVersion matches.
+The repo buildspec selects Corretto 17, builds the JAR inside AWS, and publishes
+ArtifactsBucketName/ops-console/<sha>.jar. Record the build ID and printed S3 key.
+Create/reuse the matching EB application version from that S3 key, then update
+ops-console-staging with VersionLabel only. CloudFormation owns SERVER_PORT=5000, ACCOUNTS_API_URL
 from AccountsApiUrl, and health path /healthz; keep these settings in the stack.
 Wait for Ready/Green on the expected version. Run its live
 browser smoke and show the account directory and detail before risk badges.
@@ -115,7 +120,7 @@ Rehearse the following beats. Agree the wire contract and Low/Med/High threshold
 | Parallel implementation | Three subagents, one per repo, each in its own git worktree and `dexto/*` branch from baseline. `dev-toolchain` supplies local tools. | Subagents view; worktree tool rows |
 | Local integration QA | Run risk score + eval on shared local data, API list/detail contract tests, Java tests, and browser directory/detail/filter tests against the local stack. Regenerate API OpenAPI schema. | Test tool rows; Todos panel |
 | Contract mismatch catch | Catch snake_case `risk_score` vs Java camelCase mapping and 0–1 probability vs 0–100 score. Show the failing assertion, fix the DTO mapping/scale boundary, and rerun green; verify both endpoints and badge/filter boundaries. | Failed then passing tool rows; subagent handoff |
-| Image builds | Commit and push feature branches through GitHub so CodeBuild can fetch SHAs; build API and risk images at those exact SHAs, with no deploy in buildspec. | GitHub tool rows; approvals when presented; AWS MCP build rows |
+| CodeBuild builds | Commit and push feature branches through GitHub so CodeBuild can fetch SHAs; build API and risk images and publish the console JAR at those exact SHAs, with no deploy in buildspec. | GitHub tool rows; approvals when presented; AWS MCP build rows |
 | EKS rollout | Apply API SHA image via `apply_yaml`; verify two updated/available replicas with `read_k8s_resource`. Use `list_k8s_resources`, `get_pod_logs`, `get_k8s_events` if needed; check live list/detail responses. | EKS MCP tool rows; rollout result |
 | Batch run + eval | Register SHA job definition, preserve public IP and tags, submit job, wait for SUCCEEDED, show CloudWatch eval metrics and fresh S3 output with 0–100 scores for every account. Deploy console JAR to EB per DEPLOY.md, retaining API URL. | AWS MCP tool rows; eval JSON; approvals when presented |
 | Staging browser QA | `browser` opens the live console; verify badges, High-risk filter, search/industry/pagination/detail, and API consistency. Save actual screenshots on an orphan `dexto-evidence/*` branch (no application history), linking exact evidence files. | Inline screenshots; browser tool rows; evidence branch push |
@@ -140,7 +145,7 @@ dexto-evidence/* branch, and reply on the PR with the commit, test/deploy result
 and screenshots. Report the Loop configuration and enabled status in this chat.
 ```
 
-Rahul adds **“Show Low/Med/High next to the number”** as a **top-level PR comment** on the ops-console PR, not an inline review comment. Expected: Loop trigger/run appears in Dexto; agent reads context, adds the agreed labels alongside numeric badges, tests boundaries, builds/uploads a new JAR, waits for EB Ready/Green, captures staging screenshots, pushes to the same PR, and posts its evidence reply as the bot. Keep the existing review request; refresh the delivery artifact. Pause the Loop before reset/teardown.
+Rahul adds **“Show Low/Med/High next to the number”** as a **top-level PR comment** on the ops-console PR, not an inline review comment. Expected: Loop trigger/run appears in Dexto; agent reads context, adds the agreed labels alongside numeric badges, tests boundaries, builds/publishes a new JAR through CodeBuild ops-console-jar, waits for EB Ready/Green, captures staging screenshots, pushes to the same PR, and posts its evidence reply as the bot. Keep the existing review request; refresh the delivery artifact. Pause the Loop before reset/teardown.
 
 ## 6. Recording and assets
 
@@ -149,9 +154,9 @@ Save everything together in one Dexto artifact/folder named **`brahma-demo-<date
 - Screen recording file (original and edited cut).
 - Key screenshots: connections/computer setup, baseline, plan/Todos, three subagents, contract failure/fix, rollout, eval, staging badges/filter/detail, PR author/reviewer, optional Loop before/after.
 - Delivery report; baseline and deployed SHAs; three PR links; orphan evidence branch/file links; console and API staging URLs.
-- Batch job id, definition revision, timestamp and eval metrics (AUC, bounds, determinism, pass); both CodeBuild ids and statuses.
+- Batch job id, definition revision, timestamp and eval metrics (AUC, bounds, determinism, pass); all three CodeBuild ids and statuses.
 
-Exclude External ID and presigned upload URLs from captures. Screenshots in the orphan evidence branch are linked from the same artifact.
+Exclude External ID from captures. Screenshots in the orphan evidence branch are linked from the same artifact.
 
 | Suggested 9-minute cut | Beats to show |
 | --- | --- |
