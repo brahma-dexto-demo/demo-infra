@@ -7,6 +7,8 @@ org=brahma-dexto-demo
 repos=(accounts-api risk-engine ops-console)
 base_root=/workspace/repos/$org
 task_root=/workspace/tasks
+# Task folders of earlier takes whose worktrees are already gone; their reports are stale.
+task_dirs=("$task_root/account-risk-score" "$task_root/account-risk-redelivery" "$task_root/before-staging")
 
 is_feature_branch() {
   case "$1" in dexto/* | dexto-evidence/*) return 0 ;; *) return 1 ;; esac
@@ -38,6 +40,7 @@ for repo in "${repos[@]}"; do
         "$task_root"/*)
           git -C "$base" worktree remove --force -- "$worktree"
           removed=$((removed + 1))
+          task_dirs+=("$(dirname "$worktree")")
           ;;
       esac
     done < <(git -C "$base" worktree list --porcelain | sed -n 's/^worktree //p')
@@ -52,6 +55,22 @@ for repo in "${repos[@]}"; do
     done < <(git -C "$base" for-each-ref --format='%(refname:short)' refs/heads)
     git -C "$base" fetch --quiet --prune origin
     git -C "$base" merge --quiet --ff-only origin/main
+    # Drop the deleted branches' commits so a new take cannot pick them up again.
+    git -C "$base" reflog expire --expire=now --all
+    git -C "$base" gc --quiet --prune=now
   fi
   echo "$repo: closed $closed PRs, deleted $deleted branches, removed $removed worktrees, main=$(git -C "$base" rev-parse --short HEAD 2>/dev/null || echo missing)"
+done
+
+# Remove the takes' leftover task folders (old delivery reports and test output), but only
+# when no git worktree of any repository is still inside them.
+for dir in "${task_dirs[@]}"; do
+  case "$dir" in "$task_root"/?*) ;; *) continue ;; esac
+  [ -d "$dir" ] || continue
+  if [ -n "$(find "$dir" -mindepth 2 -maxdepth 2 -name .git -print -quit)" ]; then
+    echo "kept $dir: it still holds a worktree"
+    continue
+  fi
+  rm -rf -- "$dir"
+  echo "removed task folder $dir"
 done

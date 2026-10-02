@@ -24,8 +24,8 @@ bash /workspace/repos/brahma-dexto-demo/demo-infra/scripts/reset-computer.sh
 
 It closes open PRs whose head branch starts with `dexto/` or `dexto-evidence/` without
 merging, deletes those remote branches, removes the task worktrees under
-`/workspace/tasks`, deletes the local feature branches, and fast-forwards the base
-clones. It stops if a base clone has uncommitted changes; report that instead of
+`/workspace/tasks` and the takes' leftover task folders (old delivery reports), deletes
+the local feature branches and their commits, and fast-forwards the base clones. It stops if a base clone has uncommitted changes; report that instead of
 discarding work.
 
 Every worktree of these three repos under `/workspace/tasks` is demo scratch, whichever
