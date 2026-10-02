@@ -5,130 +5,88 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Brahma demo explainer</title>
 <style>
-  /* A 1920x1080 stage scaled to the window. The timeline follows the narration for
-     shot 2 (26 s). Keys: R restart, Space pause/resume, 1-5 jump to a step, A show all. */
-  :root { --bg: #0e1116; --fg: #f2f4f7; --muted: #9aa5b4; --line: #2c3440; --box: #161b23;
-          --accent: #5fc2e6; --accent-soft: #12303c; }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; background: var(--bg); overflow: hidden; }
-  body { display: flex; align-items: center; justify-content: center;
-         font-family: "Helvetica Neue", Arial, sans-serif; color: var(--fg); }
-  svg { width: 100vw; height: 100vh; display: block; }
-  .name { font: 600 40px ui-monospace, Menlo, Consolas, monospace; fill: var(--fg); }
-  .text { font: 30px "Helvetica Neue", Arial, sans-serif; fill: var(--muted); }
-  .strong { font: 600 34px "Helvetica Neue", Arial, sans-serif; fill: var(--fg); }
-  .label { font: 500 22px ui-monospace, Menlo, Consolas, monospace; fill: var(--muted); letter-spacing: 2px; }
-  .title { font: 600 54px "Helvetica Neue", Arial, sans-serif; fill: var(--fg); }
-  .caption { font: 36px "Helvetica Neue", Arial, sans-serif; fill: var(--fg); }
-  .box { fill: var(--box); stroke: var(--line); stroke-width: 2; }
-  .target { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
-  .arrow { stroke: var(--muted); stroke-width: 3; fill: none; }
-  .head { fill: var(--muted); }
-  .step { opacity: 0; transition: opacity .6s ease; }
-  .step.on { opacity: 1; }
-  .repo { opacity: .28; transition: opacity .6s ease; }
-  .repo.lit { opacity: 1; }
-  @media (prefers-reduced-motion: reduce) { .step, .repo { transition: none; } }
+  /* Four slides on a 1920x1080 stage. Slides A to C play by themselves in 46 seconds,
+     in step with the narration for shots 2a to 2c. Slide D (AWS) plays alone in 11
+     seconds: open the page with #aws.
+     Keys: R restart, Space pause or resume, Right and Left step, A show everything,
+     1 to 4 jump to a slide fully revealed. */
+  :root { --x-fg: #f2f4f7; --x-muted: #9aa5b4; --x-line: #2c3440; --x-box: #161b23;
+          --x-accent: #5fc2e6; --x-accent-soft: #12303c; }
+  html, body { height: 100%; margin: 0; background: #0e1116; overflow: hidden; }
+  svg { position: absolute; inset: 0; width: 100vw; height: 100vh; display: none; }
+  svg.current { display: block; }
+  [data-step] { opacity: 0; transition: opacity .5s ease; }
+  [data-step].on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { [data-step] { transition: none; } }
+
+  .x-title { font: 600 60px "Helvetica Neue", Arial, sans-serif; fill: var(--x-fg); }
+  .x-big { font: 600 64px "Helvetica Neue", Arial, sans-serif; fill: var(--x-fg); }
+  .x-strong { font: 600 38px "Helvetica Neue", Arial, sans-serif; fill: var(--x-fg); }
+  .x-name { font: 600 38px ui-monospace, Menlo, Consolas, monospace; fill: var(--x-fg); }
+  .x-cell { font: 34px "Helvetica Neue", Arial, sans-serif; fill: var(--x-muted); }
+  .x-caption { font: 40px "Helvetica Neue", Arial, sans-serif; fill: var(--x-fg); }
+  .x-label { font: 500 24px ui-monospace, Menlo, Consolas, monospace; fill: var(--x-muted); letter-spacing: 2px; }
+  .x-accent { fill: var(--x-accent); }
+  .x-box { fill: var(--x-box); stroke: var(--x-line); stroke-width: 2; }
+  .x-target { fill: var(--x-accent-soft); stroke: var(--x-accent); stroke-width: 2; }
+  .x-account { fill: none; stroke: var(--x-muted); stroke-width: 2; stroke-dasharray: 10 8; }
+  .x-missing { fill: none; stroke: var(--x-accent); stroke-width: 2; stroke-dasharray: 8 6; }
+  .x-rule { stroke: var(--x-line); stroke-width: 2; }
+  .x-arrow { stroke: var(--x-muted); stroke-width: 3; fill: none; }
+  .x-head { fill: var(--x-muted); }
+
 </style>
 </head>
 <body>
-<svg viewBox="0 0 1920 1080" role="img" aria-label="Three repositories, where each deploys, and how they connect">
-  <defs>
-    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" class="head"/>
-    </marker>
-  </defs>
-
-  <text x="120" y="150" class="title step" data-step="1">One product, three repositories</text>
-
-  <g class="repo step" data-step="1" data-col="1">
-    <rect x="120" y="230" width="520" height="230" rx="10" class="box"/>
-    <text x="156" y="300" class="name">risk-engine</text>
-    <text x="156" y="360" class="text">Python batch job.</text>
-    <text x="156" y="406" class="text">Scores each customer account.</text>
-  </g>
-  <g class="repo step" data-step="1" data-col="2">
-    <rect x="700" y="230" width="520" height="230" rx="10" class="box"/>
-    <text x="736" y="300" class="name">accounts-api</text>
-    <text x="736" y="360" class="text">Python REST service.</text>
-    <text x="736" y="406" class="text">Serves accounts and their scores.</text>
-  </g>
-  <g class="repo step" data-step="1" data-col="3">
-    <rect x="1280" y="230" width="520" height="230" rx="10" class="box"/>
-    <text x="1316" y="300" class="name">ops-console</text>
-    <text x="1316" y="360" class="text">Java web app.</text>
-    <text x="1316" y="406" class="text">Staff look up accounts here.</text>
-  </g>
-
-  <g class="step" data-step="2">
-    <line x1="380" y1="460" x2="380" y2="584" class="arrow" marker-end="url(#ah)"/>
-    <text x="404" y="534" class="label">DEPLOYS TO</text>
-    <rect x="120" y="592" width="520" height="160" rx="10" class="target"/>
-    <text x="156" y="658" class="strong">AWS Batch</text>
-    <text x="156" y="708" class="text">Docker image, run as a job</text>
-  </g>
-  <g class="step" data-step="3">
-    <line x1="960" y1="460" x2="960" y2="584" class="arrow" marker-end="url(#ah)"/>
-    <text x="984" y="534" class="label">DEPLOYS TO</text>
-    <rect x="700" y="592" width="520" height="160" rx="10" class="target"/>
-    <text x="736" y="658" class="strong">Amazon EKS</text>
-    <text x="736" y="708" class="text">Docker image on Kubernetes</text>
-  </g>
-  <g class="step" data-step="4">
-    <line x1="1540" y1="460" x2="1540" y2="584" class="arrow" marker-end="url(#ah)"/>
-    <text x="1564" y="534" class="label">DEPLOYS TO</text>
-    <rect x="1280" y="592" width="520" height="160" rx="10" class="target"/>
-    <text x="1316" y="658" class="strong">Elastic Beanstalk</text>
-    <text x="1316" y="708" class="text">JAR file</text>
-  </g>
-
-  <g class="step" data-step="5">
-    <line x1="640" y1="672" x2="692" y2="672" class="arrow" marker-end="url(#ah)"/>
-    <line x1="1272" y1="672" x2="1228" y2="672" class="arrow" marker-end="url(#ah)"/>
-    <text x="670" y="812" class="label" text-anchor="middle">SCORES GO TO S3, THE API READS THEM</text>
-    <text x="1250" y="812" class="label" text-anchor="middle">THE CONSOLE CALLS THE API</text>
-    <text x="960" y="950" class="caption" text-anchor="middle">One feature, a risk score, changes all three and ships three different ways.</text>
-  </g>
-</svg>
+<svg data-slide="A" viewBox="0 0 1920 1080" role="img"><defs><marker id="x-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="x-head"/></marker></defs><text x="960" y="150" class="x-title" text-anchor="middle" data-step="1">An operations team looks after customer accounts</text><g data-step="1"><rect x="150" y="250" width="1620" height="470" rx="12" class="x-box"/><text x="200" y="318" class="x-name">Operations console</text><line x1="150" y1="350" x2="1770" y2="350" class="x-rule"/><text x="200" y="410" class="x-label">CUSTOMER</text><text x="560" y="410" class="x-label">INDUSTRY</text><text x="810" y="410" class="x-label">MONTHLY SPEND</text><text x="1070" y="410" class="x-label">OPEN TICKETS</text><text x="1300" y="410" class="x-label">LAST LOGIN</text><text x="200" y="500" class="x-strong">Harbor Partners</text><text x="560" y="500" class="x-cell">Healthcare</text><text x="810" y="500" class="x-cell">$21,725</text><text x="1070" y="500" class="x-cell">2</text><text x="1300" y="500" class="x-cell">59 days ago</text><text x="200" y="580" class="x-strong">Beacon Labs</text><text x="560" y="580" class="x-cell">Finance</text><text x="810" y="580" class="x-cell">$218</text><text x="1070" y="580" class="x-cell">13</text><text x="1300" y="580" class="x-cell">50 days ago</text><text x="200" y="660" class="x-strong">Willow Works</text><text x="560" y="660" class="x-cell">Retail</text><text x="810" y="660" class="x-cell">$852</text><text x="1070" y="660" class="x-cell">1</text><text x="1300" y="660" class="x-cell">3 days ago</text></g><g data-step="2"><text x="1650" y="410" class="x-label x-accent" text-anchor="middle">RISK</text><rect x="1590" y="462" width="120" height="54" rx="8" class="x-missing"/><text x="1650" y="500" class="x-strong x-accent" text-anchor="middle">?</text><rect x="1590" y="542" width="120" height="54" rx="8" class="x-missing"/><text x="1650" y="580" class="x-strong x-accent" text-anchor="middle">?</text><rect x="1590" y="622" width="120" height="54" rx="8" class="x-missing"/><text x="1650" y="660" class="x-strong x-accent" text-anchor="middle">?</text><text x="960" y="850" class="x-caption" text-anchor="middle">What it does not show: which customers are likely to leave.</text></g></svg>
+<svg data-slide="B" viewBox="0 0 1920 1080" role="img"><defs><marker id="x-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="x-head"/></marker></defs><text x="960" y="150" class="x-title" text-anchor="middle" data-step="1">The product has three parts</text><g data-step="2"><rect x="120" y="240" width="520" height="330" rx="12" class="x-box"/><text x="160" y="310" class="x-label x-accent">THE ENGINE</text><text x="160" y="380" class="x-strong">Scores every account</text><text x="160" y="460" class="x-name">risk-engine</text><text x="160" y="520" class="x-cell">Python job</text><line x1="380" y1="570" x2="380" y2="650" class="x-arrow" marker-end="url(#x-ah)"/><text x="404" y="622" class="x-label">RUNS ON</text><rect x="120" y="658" width="520" height="120" rx="12" class="x-target"/><text x="380" y="732" class="x-strong" text-anchor="middle">AWS Batch</text></g><g data-step="3"><rect x="700" y="240" width="520" height="330" rx="12" class="x-box"/><text x="740" y="310" class="x-label x-accent">THE API</text><text x="740" y="380" class="x-strong">Serves the accounts</text><text x="740" y="460" class="x-name">accounts-api</text><text x="740" y="520" class="x-cell">Python service</text><line x1="960" y1="570" x2="960" y2="650" class="x-arrow" marker-end="url(#x-ah)"/><text x="984" y="622" class="x-label">RUNS ON</text><rect x="700" y="658" width="520" height="120" rx="12" class="x-target"/><text x="960" y="732" class="x-strong" text-anchor="middle">Amazon EKS</text></g><g data-step="4"><rect x="1280" y="240" width="520" height="330" rx="12" class="x-box"/><text x="1320" y="310" class="x-label x-accent">THE CONSOLE</text><text x="1320" y="380" class="x-strong">What the team uses</text><text x="1320" y="460" class="x-name">ops-console</text><text x="1320" y="520" class="x-cell">Java web app</text><line x1="1540" y1="570" x2="1540" y2="650" class="x-arrow" marker-end="url(#x-ah)"/><text x="1564" y="622" class="x-label">RUNS ON</text><rect x="1280" y="658" width="520" height="120" rx="12" class="x-target"/><text x="1540" y="732" class="x-strong" text-anchor="middle">Elastic Beanstalk</text></g><text x="960" y="900" class="x-caption" text-anchor="middle" data-step="5">Each part lives in its own repository.</text></svg>
+<svg data-slide="C" viewBox="0 0 1920 1080" role="img"><defs><marker id="x-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="x-head"/></marker></defs><text x="960" y="150" class="x-title" text-anchor="middle" data-step="1">One change: show a risk score</text><g data-step="2"><rect x="150" y="300" width="460" height="220" rx="12" class="x-target"/><text x="380" y="390" class="x-name" text-anchor="middle">risk-engine</text><text x="380" y="460" class="x-strong x-accent" text-anchor="middle">computes it</text></g><g data-step="3"><rect x="730" y="300" width="460" height="220" rx="12" class="x-target"/><text x="960" y="390" class="x-name" text-anchor="middle">accounts-api</text><text x="960" y="460" class="x-strong x-accent" text-anchor="middle">returns it</text><line x1="620" y1="410" x2="720" y2="410" class="x-arrow" marker-end="url(#x-ah)"/></g><g data-step="4"><rect x="1310" y="300" width="460" height="220" rx="12" class="x-target"/><text x="1540" y="390" class="x-name" text-anchor="middle">ops-console</text><text x="1540" y="460" class="x-strong x-accent" text-anchor="middle">displays it</text><line x1="1200" y1="410" x2="1300" y2="410" class="x-arrow" marker-end="url(#x-ah)"/></g><g data-step="5"><text x="960" y="690" class="x-big" text-anchor="middle">Three codebases. Three deployments.</text><text x="960" y="790" class="x-caption" text-anchor="middle">Usually days of coordination between teams.</text></g></svg>
+<svg data-slide="D" viewBox="0 0 1920 1080" role="img"><defs><marker id="x-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="x-head"/></marker></defs><text x="960" y="150" class="x-title" text-anchor="middle" data-step="1">Dexto works inside your AWS account</text><g data-step="1"><rect x="120" y="380" width="340" height="200" rx="12" class="x-box"/><text x="290" y="495" class="x-big" text-anchor="middle">Dexto</text><rect x="700" y="240" width="1100" height="480" rx="16" class="x-account"/><text x="740" y="300" class="x-label">YOUR AWS ACCOUNT</text></g><g data-step="2"><line x1="460" y1="480" x2="752" y2="480" class="x-arrow" marker-end="url(#x-ah)"/><text x="606" y="450" class="x-label" text-anchor="middle">USES THE ROLE</text><text x="606" y="530" class="x-label" text-anchor="middle">NO ACCESS KEYS</text><rect x="760" y="380" width="360" height="200" rx="12" class="x-target"/><text x="940" y="465" class="x-strong" text-anchor="middle">A role you create</text><text x="940" y="520" class="x-cell" text-anchor="middle">sets what is allowed</text></g><g data-step="3"><line x1="1120" y1="480" x2="1272" y2="380" class="x-arrow" marker-end="url(#x-ah)"/><rect x="1280" y="340" width="460" height="80" rx="10" class="x-box"/><text x="1510" y="392" class="x-strong" text-anchor="middle">AWS Batch</text><line x1="1120" y1="480" x2="1272" y2="490" class="x-arrow" marker-end="url(#x-ah)"/><rect x="1280" y="450" width="460" height="80" rx="10" class="x-box"/><text x="1510" y="502" class="x-strong" text-anchor="middle">Amazon EKS</text><line x1="1120" y1="480" x2="1272" y2="600" class="x-arrow" marker-end="url(#x-ah)"/><rect x="1280" y="560" width="460" height="80" rx="10" class="x-box"/><text x="1510" y="612" class="x-strong" text-anchor="middle">Elastic Beanstalk</text></g><text x="960" y="850" class="x-caption" text-anchor="middle" data-step="4">Builds and deploys run in your account, within the limits of that role.</text></svg>
 <script>
-  // Seconds from start at which each step appears, and which repository is lit.
-  // Tuned to the narration for shot 2; adjust here if the voice track differs.
-  const timeline = [
-    { at: 0.5, step: 1, lit: [1, 2, 3] },
-    { at: 4.5, step: 2, lit: [1] },
-    { at: 10.0, step: 3, lit: [2] },
-    { at: 15.0, step: 4, lit: [3] },
-    { at: 20.0, step: 5, lit: [1, 2, 3] },
-  ];
-  const steps = [...document.querySelectorAll("[data-step]")];
-  const repos = [...document.querySelectorAll("[data-col]")];
+  // Each beat: seconds from the start, the slide, and how many steps of it are visible.
+  // Tuned to the narration; change the numbers here if the voice track runs differently.
+  const decks = {
+    main: [
+      [0.3, "A", 1], [7.0, "A", 2],
+      [13.0, "B", 1], [15.0, "B", 2], [20.0, "B", 3], [25.0, "B", 4], [29.5, "B", 5],
+      [32.0, "C", 1], [35.5, "C", 2], [37.5, "C", 3], [39.5, "C", 4], [41.5, "C", 5],
+    ],
+    aws: [[0.3, "D", 1], [2.5, "D", 2], [6.0, "D", 3], [8.0, "D", 4]],
+  };
+  const deck = location.hash === "#aws" ? decks.aws : decks.main;
+  const slides = Object.fromEntries([...document.querySelectorAll("svg")].map((el) => [el.dataset.slide, el]));
   let timers = [];
+  let index = -1;
   let paused = false;
 
-  function show(upTo, lit) {
-    for (const el of steps) el.classList.toggle("on", Number(el.dataset.step) <= upTo);
-    for (const el of repos) el.classList.toggle("lit", lit.includes(Number(el.dataset.col)));
+  function show(slide, upTo) {
+    for (const [name, el] of Object.entries(slides)) el.classList.toggle("current", name === slide);
+    for (const el of slides[slide].querySelectorAll("[data-step]")) {
+      el.classList.toggle("on", Number(el.dataset.step) <= upTo);
+    }
+  }
+  function go(to) {
+    index = Math.max(0, Math.min(deck.length - 1, to));
+    show(deck[index][1], deck[index][2]);
   }
   function clear() { timers.forEach(clearTimeout); timers = []; }
   function play() {
     clear();
     paused = false;
-    show(0, []);
-    for (const beat of timeline) {
-      timers.push(setTimeout(() => show(beat.step, beat.lit), beat.at * 1000));
-    }
+    show(deck[0][1], 0);
+    deck.forEach(([at], i) => timers.push(setTimeout(() => go(i), at * 1000)));
   }
   addEventListener("keydown", (event) => {
-    if (event.key === "r" || event.key === "R") play();
-    else if (event.key === "a" || event.key === "A") { clear(); show(5, [1, 2, 3]); }
-    else if (event.key === " ") { paused = !paused; if (paused) clear(); else play(); }
-    else if (/^[1-5]$/.test(event.key)) {
-      clear();
-      const beat = timeline[Number(event.key) - 1];
-      show(beat.step, beat.lit);
-    }
+    const key = event.key.toLowerCase();
+    if (key === "r") play();
+    else if (key === " ") { paused = !paused; if (paused) clear(); else play(); }
+    else if (key === "arrowright") { clear(); go(index + 1); }
+    else if (key === "arrowleft") { clear(); go(index - 1); }
+    else if (key === "a") { clear(); show(deck[Math.max(index, 0)][1], 99); }
+    else if (/^[1-4]$/.test(key)) { clear(); show("ABCD"[Number(key) - 1], 99); }
   });
-  if (location.hash === "#all") show(5, [1, 2, 3]); else play();
+  if (location.hash.startsWith("#slide")) show(location.hash.slice(6).toUpperCase(), 99);
+  else play();
 </script>
 </body>
 </html>
