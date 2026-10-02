@@ -36,9 +36,8 @@ touched by the script.
 
 ## 2. Scores and console (one AWS call)
 
-Read `reset/aws_restore.py`, replace `__BASELINE_JSON__` with the contents of
-`baseline.json`, and run it as the code of **one** managed AWS MCP `aws___run_script`
-call. It restores `scores/latest.json` from the baseline snapshot by server-side copy
+Run the contents of `reset/aws_restore.py`, unchanged, as the code of **one** managed AWS
+MCP `aws___run_script` call. It restores `scores/latest.json` from the baseline snapshot by server-side copy
 when they differ, switches the console to the baseline version label when it differs,
 and prints a JSON report: `cluster`, `api_url`, `api_image`, `api_digest`, `data_bucket`,
 `console_url`, `scores`, `console`.

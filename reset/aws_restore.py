@@ -1,11 +1,27 @@
-# Body for one managed AWS MCP `aws___run_script` call. Idempotent: restores the baseline
+# Paste this whole file, unchanged, as the code of one managed AWS MCP `aws___run_script`
+# call. Idempotent: restores the baseline
 # scores and console version only when they differ, and prints one JSON state report.
 # `call_boto3` is provided by the tool; adapt only the call syntax if its documented
 # signature differs. Operation names are the AWS API names.
 import json
 
 REGION = "us-east-1"
-BASELINE = json.loads("""__BASELINE_JSON__""")
+# Copied from baseline.json; scripts/validate.sh fails if the two drift apart.
+BASELINE = {
+    "stack": "brahma-demo-staging",
+    "accounts-api": {
+        "image_tag": "f07918f05298373220da69ff027e38c973a6937f"
+    },
+    "scores": {
+        "live_key": "scores/latest.json",
+        "snapshot_key": "baselines/scores/latest.json"
+    },
+    "ops-console": {
+        "application": "ops-console",
+        "environment": "ops-console-staging",
+        "version_label": "b05ffa20b97bf66eb73845a4eb8fe4ad8a3ecfbf"
+    }
+}
 
 
 async def aws(service, operation, **params):

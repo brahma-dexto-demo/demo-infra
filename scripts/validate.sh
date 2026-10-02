@@ -26,3 +26,17 @@ else
 fi
 ./scripts/reset.sh --dry-run >/dev/null
 echo 'baseline JSON and reset script: PASS'
+python3 - <<'PY'
+import ast, json, re
+baseline = json.load(open("baseline.json"))
+source = open("reset/aws_restore.py").read()
+embedded = ast.literal_eval(re.search(r"^BASELINE = (\{.*?^\})", source, re.S | re.M).group(1))
+for section, values in embedded.items():
+    expected = baseline[section] if isinstance(values, dict) else baseline[section]
+    if isinstance(values, dict):
+        for key, value in values.items():
+            assert expected[key] == value, f"aws_restore.py {section}.{key} differs from baseline.json"
+    else:
+        assert expected == values, f"aws_restore.py {section} differs from baseline.json"
+PY
+echo 'aws_restore.py baseline matches baseline.json: PASS'
