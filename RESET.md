@@ -6,7 +6,7 @@ Paste into Dexto, in a fresh chat:
 Reset the Brahma demo to baseline: follow demo-infra/RESET.md
 ```
 
-This returns the demo to the exact before state for another take. It is safe to run any
+The files are in `/workspace/repos/brahma-dexto-demo/demo-infra`. This returns the demo to the exact before state for another take. It is safe to run any
 number of times and takes 2–4 minutes once the scores snapshot exists.
 
 **Rules.** Do exactly the steps below, in order, and nothing else. Never build, never
@@ -50,8 +50,8 @@ and prints a JSON report: `cluster`, `api_url`, `api_image`, `api_digest`, `data
 ## 3. API on EKS (apply only when it differs)
 
 The EKS tool hides image tags, so compare digests. With managed EKS MCP
-`list_k8s_resources` (cluster from the report, kind Pod, namespace `demo`, label
-`app=accounts-api`): if there are exactly two Running pods and every
+`list_k8s_resources` (cluster from the report, kind Pod, api_version `v1`, namespace
+`demo`, label `app=accounts-api`): if there are exactly two Running pods and every
 `status.containerStatuses[0].imageID` ends with `api_digest`, the API is already at
 baseline; skip to step 4.
 
