@@ -187,36 +187,25 @@ Without the Loop, expand staging QA/report to finish near eight minutes; allow t
 
 ## 8. Reset between takes
 
-Pause the review Loop and active delivery agents/builds/jobs, and preserve the
-recording/artifact outside task worktrees. Then paste this single prompt:
+Paste this single prompt in a fresh chat in the Project:
 
 ```text
 Reset the Brahma demo to baseline: follow demo-infra/RESET.md
 ```
 
-[RESET.md](RESET.md) uses the immutable revisions in [baseline.json](baseline.json).
-It closes matching feature/evidence PRs without merging, deletes remote/local
-`dexto/*` and `dexto-evidence/*` branches in the three application repos, removes
-their task worktrees, and keeps/fast-forwards the base clones. It restores the
-existing baseline API image, exact score snapshot, and existing console EB version,
-then verifies live list/detail contracts and browser directory/detail without risk
-badges or the High-risk filter. It never rebuilds, recreates infrastructure, touches
-main or other branches/repos, changes input data or stack settings, or removes
-recordings. The snapshot and original images/JAR/version must be retained.
+[RESET.md](RESET.md) restores the exact before state pinned in
+[baseline.json](baseline.json) and is safe to run any number of times. It closes the
+take's bot PRs without merging, deletes the `dexto/*` and `dexto-evidence/*` branches in
+the three application repos, removes the task worktrees, re-applies the baseline API
+image on EKS, restores the baseline scores from a snapshot, and points the console at
+its baseline version. Nothing is rebuilt, and no Loop or Dexto setting is touched.
 
-**Expected runtime:** normally 2–5 minutes, under 10 minutes with healthy staging
-and the snapshot prepared. On the first reset only, if the snapshot is absent,
-one baseline Batch job initializes it after successful evaluation. Fargate startup
-can take longer: do this once before recording. Subsequent resets use a server-side
-S3 copy, or skip it if already equal. Install the updated bootstrap once for the
-two exact-key score writes; no extra EB/EKS grants are needed. Reset is safe to
-repeat after interruption; run one reset at a time, with other writers stopped.
+**Expected runtime:** 2–4 minutes. The very first reset also runs one baseline Batch job
+to create the scores snapshot (about 10 minutes); do that once before recording.
 
-The admin AWS SSO + gh fallback is [scripts/reset.sh](scripts/reset.sh); use
-`--dry-run` to review its plan. It skips Dexto computer cleanup and prints directions.
-After verified reset, capture a fresh baseline and start a fresh Dexto conversation.
-Re-enable/recreate the Loop only once the next take's PRs exist. See RESET.md for
-checks, asynchronous waits, failure recovery and the changed/already-baseline report.
+If you created the Prompt 4 review Loop for a take, pause or delete that Loop yourself
+before resetting. The admin fallback with AWS SSO and `gh` is
+[scripts/reset.sh](scripts/reset.sh) (`--dry-run` prints the plan).
 
 ### Teardown
 
