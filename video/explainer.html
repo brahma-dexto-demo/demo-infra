@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brahma demo explainer</title>
+<style>
+  /* A 1920x1080 stage scaled to the window. The timeline follows the narration for
+     shot 2 (26 s). Keys: R restart, Space pause/resume, 1-5 jump to a step, A show all. */
+  :root { --bg: #0e1116; --fg: #f2f4f7; --muted: #9aa5b4; --line: #2c3440; --box: #161b23;
+          --accent: #5fc2e6; --accent-soft: #12303c; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center;
+         font-family: "Helvetica Neue", Arial, sans-serif; color: var(--fg); }
+  svg { width: 100vw; height: 100vh; display: block; }
+  .name { font: 600 40px ui-monospace, Menlo, Consolas, monospace; fill: var(--fg); }
+  .text { font: 30px "Helvetica Neue", Arial, sans-serif; fill: var(--muted); }
+  .strong { font: 600 34px "Helvetica Neue", Arial, sans-serif; fill: var(--fg); }
+  .label { font: 500 22px ui-monospace, Menlo, Consolas, monospace; fill: var(--muted); letter-spacing: 2px; }
+  .title { font: 600 54px "Helvetica Neue", Arial, sans-serif; fill: var(--fg); }
+  .caption { font: 36px "Helvetica Neue", Arial, sans-serif; fill: var(--fg); }
+  .box { fill: var(--box); stroke: var(--line); stroke-width: 2; }
+  .target { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+  .arrow { stroke: var(--muted); stroke-width: 3; fill: none; }
+  .head { fill: var(--muted); }
+  .step { opacity: 0; transition: opacity .6s ease; }
+  .step.on { opacity: 1; }
+  .repo { opacity: .28; transition: opacity .6s ease; }
+  .repo.lit { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .step, .repo { transition: none; } }
+</style>
+</head>
+<body>
+<svg viewBox="0 0 1920 1080" role="img" aria-label="Three repositories, where each deploys, and how they connect">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" class="head"/>
+    </marker>
+  </defs>
+
+  <text x="120" y="150" class="title step" data-step="1">One product, three repositories</text>
+
+  <g class="repo step" data-step="1" data-col="1">
+    <rect x="120" y="230" width="520" height="230" rx="10" class="box"/>
+    <text x="156" y="300" class="name">risk-engine</text>
+    <text x="156" y="360" class="text">Python batch job.</text>
+    <text x="156" y="406" class="text">Scores each customer account.</text>
+  </g>
+  <g class="repo step" data-step="1" data-col="2">
+    <rect x="700" y="230" width="520" height="230" rx="10" class="box"/>
+    <text x="736" y="300" class="name">accounts-api</text>
+    <text x="736" y="360" class="text">Python REST service.</text>
+    <text x="736" y="406" class="text">Serves accounts and their scores.</text>
+  </g>
+  <g class="repo step" data-step="1" data-col="3">
+    <rect x="1280" y="230" width="520" height="230" rx="10" class="box"/>
+    <text x="1316" y="300" class="name">ops-console</text>
+    <text x="1316" y="360" class="text">Java web app.</text>
+    <text x="1316" y="406" class="text">Staff look up accounts here.</text>
+  </g>
+
+  <g class="step" data-step="2">
+    <line x1="380" y1="460" x2="380" y2="584" class="arrow" marker-end="url(#ah)"/>
+    <text x="404" y="534" class="label">DEPLOYS TO</text>
+    <rect x="120" y="592" width="520" height="160" rx="10" class="target"/>
+    <text x="156" y="658" class="strong">AWS Batch</text>
+    <text x="156" y="708" class="text">Docker image, run as a job</text>
+  </g>
+  <g class="step" data-step="3">
+    <line x1="960" y1="460" x2="960" y2="584" class="arrow" marker-end="url(#ah)"/>
+    <text x="984" y="534" class="label">DEPLOYS TO</text>
+    <rect x="700" y="592" width="520" height="160" rx="10" class="target"/>
+    <text x="736" y="658" class="strong">Amazon EKS</text>
+    <text x="736" y="708" class="text">Docker image on Kubernetes</text>
+  </g>
+  <g class="step" data-step="4">
+    <line x1="1540" y1="460" x2="1540" y2="584" class="arrow" marker-end="url(#ah)"/>
+    <text x="1564" y="534" class="label">DEPLOYS TO</text>
+    <rect x="1280" y="592" width="520" height="160" rx="10" class="target"/>
+    <text x="1316" y="658" class="strong">Elastic Beanstalk</text>
+    <text x="1316" y="708" class="text">JAR file</text>
+  </g>
+
+  <g class="step" data-step="5">
+    <line x1="640" y1="672" x2="692" y2="672" class="arrow" marker-end="url(#ah)"/>
+    <line x1="1272" y1="672" x2="1228" y2="672" class="arrow" marker-end="url(#ah)"/>
+    <text x="670" y="812" class="label" text-anchor="middle">SCORES GO TO S3, THE API READS THEM</text>
+    <text x="1250" y="812" class="label" text-anchor="middle">THE CONSOLE CALLS THE API</text>
+    <text x="960" y="950" class="caption" text-anchor="middle">One feature, a risk score, changes all three and ships three different ways.</text>
+  </g>
+</svg>
+<script>
+  // Seconds from start at which each step appears, and which repository is lit.
+  // Tuned to the narration for shot 2; adjust here if the voice track differs.
+  const timeline = [
+    { at: 0.5, step: 1, lit: [1, 2, 3] },
+    { at: 4.5, step: 2, lit: [1] },
+    { at: 10.0, step: 3, lit: [2] },
+    { at: 15.0, step: 4, lit: [3] },
+    { at: 20.0, step: 5, lit: [1, 2, 3] },
+  ];
+  const steps = [...document.querySelectorAll("[data-step]")];
+  const repos = [...document.querySelectorAll("[data-col]")];
+  let timers = [];
+  let paused = false;
+
+  function show(upTo, lit) {
+    for (const el of steps) el.classList.toggle("on", Number(el.dataset.step) <= upTo);
+    for (const el of repos) el.classList.toggle("lit", lit.includes(Number(el.dataset.col)));
+  }
+  function clear() { timers.forEach(clearTimeout); timers = []; }
+  function play() {
+    clear();
+    paused = false;
+    show(0, []);
+    for (const beat of timeline) {
+      timers.push(setTimeout(() => show(beat.step, beat.lit), beat.at * 1000));
+    }
+  }
+  addEventListener("keydown", (event) => {
+    if (event.key === "r" || event.key === "R") play();
+    else if (event.key === "a" || event.key === "A") { clear(); show(5, [1, 2, 3]); }
+    else if (event.key === " ") { paused = !paused; if (paused) clear(); else play(); }
+    else if (/^[1-5]$/.test(event.key)) {
+      clear();
+      const beat = timeline[Number(event.key) - 1];
+      show(beat.step, beat.lit);
+    }
+  });
+  if (location.hash === "#all") show(5, [1, 2, 3]); else play();
+</script>
+</body>
+</html>

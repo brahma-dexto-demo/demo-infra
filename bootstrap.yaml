@@ -15,6 +15,11 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 1
+  SecondExternalId:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Optional External ID of a second Dexto space allowed to assume the role.
   BudgetEmail:
     Type: String
     AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
@@ -24,6 +29,7 @@ Parameters:
     MinValue: 1
 Conditions:
   EnforceMcpOnlyEnabled: !Equals [!Ref EnforceMcpOnly, 'true']
+  HasSecondExternalId: !Not [!Equals [!Ref SecondExternalId, '']]
 Resources:
   DextoDemoRole:
     Type: AWS::IAM::Role
@@ -44,7 +50,12 @@ Resources:
           - Effect: Allow
             Principal: {AWS: !Ref DextoPrincipalArn}
             Action: sts:AssumeRole
-            Condition: {StringEquals: {'sts:ExternalId': !Ref ExternalId}}
+            Condition:
+              StringEquals:
+                'sts:ExternalId': !If
+                  - HasSecondExternalId
+                  - [!Ref ExternalId, !Ref SecondExternalId]
+                  - !Ref ExternalId
           - Effect: Allow
             Principal: {AWS: !Ref DextoPrincipalArn}
             Action: sts:SetSourceIdentity
