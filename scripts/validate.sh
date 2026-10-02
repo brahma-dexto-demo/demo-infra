@@ -16,3 +16,13 @@ for template in bootstrap.yaml stack.yaml; do
   fi
 done
 echo 'cfn-lint: PASS (no errors or warnings)'
+
+jq empty baseline.json
+bash -n scripts/reset.sh
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck scripts/reset.sh
+else
+  echo 'shellcheck unavailable: reset.sh lint skipped (bash syntax checked)'
+fi
+./scripts/reset.sh --dry-run >/dev/null
+echo 'baseline JSON and reset script: PASS'

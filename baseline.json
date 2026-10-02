@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "stack": "brahma-demo-staging",
+  "region": "us-east-1",
+  "github_org": "brahma-dexto-demo",
+  "branch_prefixes": ["dexto/", "dexto-evidence/"],
+  "accounts-api": {
+    "sha": "f07918f05298373220da69ff027e38c973a6937f",
+    "image_tag": "f07918f05298373220da69ff027e38c973a6937f",
+    "image": "${AccountsApiEcrUri}:f07918f05298373220da69ff027e38c973a6937f"
+  },
+  "risk-engine": {
+    "sha": "d91d7478e3f2cc5432320d0807cb752d96dc3459",
+    "image_tag": "d91d7478e3f2cc5432320d0807cb752d96dc3459",
+    "image": "${RiskEngineEcrUri}:d91d7478e3f2cc5432320d0807cb752d96dc3459",
+    "job_definition_name": "risk-engine",
+    "job_queue": "${BatchQueueArn}",
+    "reset_job_name": "baseline-d91d7478e3f2cc5432320d0807cb752d96dc3459"
+  },
+  "ops-console": {
+    "sha": "b05ffa20b97bf66eb73845a4eb8fe4ad8a3ecfbf",
+    "application": "ops-console",
+    "environment": "ops-console-staging",
+    "version_label": "b05ffa20b97bf66eb73845a4eb8fe4ad8a3ecfbf",
+    "source_bucket": "${ArtifactsBucketName}",
+    "source_key": "ops-console/b05ffa20b97bf66eb73845a4eb8fe4ad8a3ecfbf.jar"
+  },
+  "kubernetes": {
+    "cluster": "${ClusterName}",
+    "namespace": "demo",
+    "deployment": "accounts-api",
+    "container": "accounts-api",
+    "service": "accounts-api",
+    "service_account": "accounts-api",
+    "replicas": 2
+  },
+  "scores": {
+    "bucket": "${DataBucketName}",
+    "live_key": "scores/latest.json",
+    "snapshot_key": "baselines/scores/latest.json"
+  }
+}

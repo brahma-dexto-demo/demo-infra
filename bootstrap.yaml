@@ -157,6 +157,13 @@ Resources:
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}/accounts/*'
+              # Server-side baseline copies: existing GetObject covers both source keys.
+              # Keep destinations exact; the existing MCP-only deny applies unchanged.
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource:
+                  - !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}/scores/latest.json'
+                  - !Sub 'arn:aws:s3:::brahma-demo-data-${AWS::AccountId}/baselines/scores/latest.json'
               # The standard EKS Service integration creates a Classic Load Balancer.
               - Effect: Allow
                 Action: elasticloadbalancing:DeleteLoadBalancer
