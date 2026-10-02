@@ -10,12 +10,12 @@
     "image": "${AccountsApiEcrUri}:f07918f05298373220da69ff027e38c973a6937f"
   },
   "risk-engine": {
-    "sha": "d91d7478e3f2cc5432320d0807cb752d96dc3459",
-    "image_tag": "d91d7478e3f2cc5432320d0807cb752d96dc3459",
-    "image": "${RiskEngineEcrUri}:d91d7478e3f2cc5432320d0807cb752d96dc3459",
+    "sha": "a21e7fc69c9f4fbf93fe3da5c0ed60c0aaef127c",
+    "image_tag": "a21e7fc69c9f4fbf93fe3da5c0ed60c0aaef127c",
+    "image": "${RiskEngineEcrUri}:a21e7fc69c9f4fbf93fe3da5c0ed60c0aaef127c",
     "job_definition_name": "risk-engine",
     "job_queue": "${BatchQueueArn}",
-    "reset_job_name": "baseline-d91d7478e3f2cc5432320d0807cb752d96dc3459"
+    "reset_job_name": "baseline-a21e7fc69c9f4fbf93fe3da5c0ed60c0aaef127c"
   },
   "ops-console": {
     "sha": "b05ffa20b97bf66eb73845a4eb8fe4ad8a3ecfbf",
