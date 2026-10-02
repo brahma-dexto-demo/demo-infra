@@ -28,6 +28,12 @@ merging, deletes those remote branches, removes the task worktrees under
 clones. It stops if a base clone has uncommitted changes; report that instead of
 discarding work.
 
+Every worktree of these three repos under `/workspace/tasks` is demo scratch, whichever
+chat created it (earlier takes, the baseline deploy, a previous reset). Pasting the reset
+prompt is the owner's instruction to remove them all, so do not stop to ask about
+worktrees or branches that another chat recorded. Worktrees of other repos are not
+touched by the script.
+
 ## 2. Scores and console (one AWS call)
 
 Read `reset/aws_restore.py`, replace `__BASELINE_JSON__` with the contents of
